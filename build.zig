@@ -50,4 +50,19 @@ pub fn build(b: *std.Build) void {
     exe.max_memory = 1024 * 1024;
 
     b.installArtifact(exe);
+
+    // Set up unit tests that can be run on host computer.
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("src/test_main.zig"),
+        .target = b.graph.host,
+        .optimize = .Debug,
+        .strip = false,
+    });
+    const tests = b.addTest(.{
+        .name = "unit_tests",
+        .root_module = test_mod,
+    });
+    const run_tests = b.addRunArtifact(tests);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_tests.step);
 }
