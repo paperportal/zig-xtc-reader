@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
     root_mod.export_symbol_names = &.{
         "pp_contract_version",
         "pp_init",
+        "pp_tick",
         "pp_alloc",
         "pp_free",
         "pp_on_gesture",

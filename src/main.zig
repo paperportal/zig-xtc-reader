@@ -1,5 +1,8 @@
 const std = @import("std");
+const app = @import("app.zig");
 const allocator = std.heap.wasm_allocator;
+
+var g_initialized: bool = false;
 
 pub fn main() !void {}
 
@@ -27,17 +30,23 @@ pub export fn pp_init(api_version: i32, api_features: i64, screen_w: i32, screen
     _ = api_features;
     _ = screen_w;
     _ = screen_h;
+
+    if (g_initialized) return 0;
+    app.init() catch {
+        return -1;
+    };
+    g_initialized = true;
+    return 0;
+}
+
+pub export fn pp_tick(now_ms: i32) i32 {
+    if (!g_initialized) return 0;
+    app.tick(now_ms);
     return 0;
 }
 
 pub export fn pp_on_gesture(kind: i32, x: i32, y: i32, dx: i32, dy: i32, duration_ms: i32, now_ms: i32, flags: i32) i32 {
-    _ = kind;
-    _ = x;
-    _ = y;
-    _ = dx;
-    _ = dy;
-    _ = duration_ms;
-    _ = now_ms;
-    _ = flags;
+    if (!g_initialized) return 0;
+    app.on_gesture(kind, x, y, dx, dy, duration_ms, now_ms, flags);
     return 0;
 }
