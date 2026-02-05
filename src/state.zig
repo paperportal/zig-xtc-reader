@@ -8,6 +8,7 @@ pub const Error = sdk.errors.Error;
 pub const Screen = enum {
     book_list,
     toc,
+    reading,
     error_screen,
 };
 
@@ -36,10 +37,13 @@ pub const State = struct {
     selected_name: [MAX_NAME + 1]u8 = .{0} ** (MAX_NAME + 1),
     selected_len: u8 = 0,
 
+    reading_page_index: u32 = 0,
+    reading_page_count: u16 = 1,
+
     error_message: [120]u8 = .{0} ** 120,
 };
 
-pub fn set_error_message(state: *State, prefix: []const u8, err: Error) void {
+pub fn set_error_message(state: *State, prefix: []const u8, err: anyerror) void {
     var last_buf: [96]u8 = undefined;
     var last: []const u8 = "";
     if (core.last_error_message(last_buf[0..])) |msg| {
@@ -48,7 +52,7 @@ pub fn set_error_message(state: *State, prefix: []const u8, err: Error) void {
         last = "";
     }
 
-    const suffix = if (last.len > 0) last else sdk.errors.errorName(err);
+    const suffix = if (last.len > 0) last else @errorName(err);
     const slice = std.fmt.bufPrint(state.error_message[0..], "{s}: {s}", .{ prefix, suffix }) catch {
         state.error_message[0] = 0;
         return;

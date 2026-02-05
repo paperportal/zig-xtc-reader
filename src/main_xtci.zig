@@ -43,6 +43,7 @@ fn run(init: std.process.Init, stdout: *std.Io.Writer, stderr: *std.Io.Writer) !
     if (std.mem.eql(u8, cmd, "toc")) return cmdToc(&it, init, stdout, stderr);
     if (std.mem.eql(u8, cmd, "pages")) return cmdPages(&it, init, stdout, stderr);
     if (std.mem.eql(u8, cmd, "page")) return cmdPage(&it, init, stdout, stderr);
+    if (std.mem.eql(u8, cmd, "rawpage")) return cmdRawPage(&it, init, stdout, stderr);
 
     try printHelp(stdout);
     return 1;
@@ -326,8 +327,109 @@ fn cmdPage(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stderr: 
     }
 
     var out_name_buf: [64]u8 = undefined;
-    const out_name = try std.fmt.bufPrint(&out_name_buf, "page-{d:0>3}.pgm", .{page_num_1});
+    const out_name = try std.fmt.bufPrint(&out_name_buf, "page-{d:0>4}.pgm", .{page_num_1});
     writePgm(init, out_name, entry.width, entry.height, pixels) catch |e| {
+        try stderr.print("xtci: failed to write '{s}': {s}\n", .{ out_name, @errorName(e) });
+        return 2;
+    };
+
+    return 0;
+}
+
+fn cmdRawPage(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stderr: *std.Io.Writer) !u8 {
+    const path = nextArgSpan(it) orelse {
+        try printHelp(stdout);
+        return 1;
+    };
+    const page_str = nextArgSpan(it) orelse {
+        try printHelp(stdout);
+        return 1;
+    };
+    if (nextArgSpan(it) != null) {
+        try printHelp(stdout);
+        return 1;
+    }
+
+    const page_num_1 = std.fmt.parseInt(u32, page_str, 10) catch {
+        try stderr.print("xtci: invalid page number '{s}'\n", .{page_str});
+        return 1;
+    };
+    if (page_num_1 == 0) {
+        try stderr.writeAll("xtci: page number is 1-based\n");
+        return 1;
+    }
+
+    var file = std.Io.Dir.cwd().openFile(init.io, path, .{ .mode = .read_only, .allow_directory = false }) catch |e| {
+        try stderr.print("xtci: failed to open '{s}': {s}\n", .{ path, @errorName(e) });
+        return 2;
+    };
+    defer file.close(init.io);
+
+    var reader_buf: [8192]u8 = undefined;
+    var file_reader = file.reader(init.io, &reader_buf);
+    var stream = SeekReadStream{ .file_reader = &file_reader };
+
+    var reader = xtc_reader.XtcReader(SeekReadStream).init(&stream) catch |e| {
+        try printCliError(stderr, e);
+        return 2;
+    };
+
+    const page_count = reader.getPageCount();
+    if (page_num_1 > page_count) {
+        try stderr.print("xtci: page out of range (1..{d})\n", .{page_count});
+        return 2;
+    }
+    const page_index0: u32 = page_num_1 - 1;
+
+    const entry = reader.readPageTableEntry(page_index0) catch |e| {
+        try printCliError(stderr, e);
+        return 2;
+    };
+
+    const raw_size: usize = @intCast(entry.data_size);
+    if (raw_size < 22) {
+        try stderr.writeAll("xtci: invalid page data size\n");
+        return 2;
+    }
+
+    const ext: []const u8 = if (reader.getBitDepth() == 2) "xth" else "xtg";
+    var out_name_buf: [64]u8 = undefined;
+    const out_name = try std.fmt.bufPrint(&out_name_buf, "page-{d:0>4}.{s}", .{ page_num_1, ext });
+
+    var out_file = std.Io.Dir.cwd().createFile(init.io, out_name, .{ .truncate = true }) catch |e| {
+        try stderr.print("xtci: failed to write '{s}': {s}\n", .{ out_name, @errorName(e) });
+        return 2;
+    };
+    defer out_file.close(init.io);
+
+    var out_buf: [4096]u8 = undefined;
+    var out_writer = out_file.writer(init.io, &out_buf);
+    const out = &out_writer.interface;
+
+    file_reader.seekTo(entry.data_offset) catch |e| {
+        try stderr.print("xtci: failed to read input: {s}\n", .{@errorName(e)});
+        return 2;
+    };
+
+    var scratch: [8192]u8 = undefined;
+    var remaining: usize = raw_size;
+    while (remaining > 0) {
+        const to_read: usize = @min(remaining, scratch.len);
+        const got = file_reader.interface.readSliceShort(scratch[0..to_read]) catch |e| {
+            try stderr.print("xtci: failed to read input: {s}\n", .{@errorName(e)});
+            return 2;
+        };
+        if (got == 0) {
+            try stderr.writeAll("xtci: unexpected end of file\n");
+            return 2;
+        }
+        out.writeAll(scratch[0..got]) catch |e| {
+            try stderr.print("xtci: failed to write '{s}': {s}\n", .{ out_name, @errorName(e) });
+            return 2;
+        };
+        remaining -= got;
+    }
+    out.flush() catch |e| {
         try stderr.print("xtci: failed to write '{s}': {s}\n", .{ out_name, @errorName(e) });
         return 2;
     };
@@ -345,10 +447,12 @@ fn printHelp(w: *std.Io.Writer) !void {
         \\  xtci toc   <filepath>
         \\  xtci pages <filepath>
         \\  xtci page  <filepath> <pagenum>
+        \\  xtci rawpage <filepath> <pagenum>
         \\
         \\Notes:
         \\  - Page numbers are 1-based.
         \\  - `page` writes `page-###.pgm` in the current directory.
+        \\  - `rawpage` writes `page-###.xtg`/`page-###.xth` in the current directory.
         \\
     );
 }

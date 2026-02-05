@@ -13,6 +13,7 @@ const books = @import("books.zig");
 const font = @import("ui/font.zig");
 const book_list_view = @import("ui/book_list_view.zig");
 const toc_view = @import("ui/toc_view.zig");
+const reading_view = @import("ui/reading_view.zig");
 const error_view = @import("ui/error_view.zig");
 
 var g_pending_tap: ?touch.TouchPoint = null;
@@ -40,6 +41,7 @@ pub fn tick(now_ms: i32) void {
                         books.scan_books(&g_state);
                     }
                 },
+                .reading => reading_view.handle_tap(&g_state, tap),
                 .error_screen => {
                     if (error_view.handle_tap(&g_state, tap)) {
                         books.scan_books(&g_state);
@@ -57,6 +59,11 @@ pub fn tick(now_ms: i32) void {
                     g_state.needs_redraw = true;
                 },
                 .toc => toc_view.render(&g_state) catch |err| {
+                    g_state.screen = .error_screen;
+                    state_mod.set_error_message(&g_state, "Render", err);
+                    g_state.needs_redraw = true;
+                },
+                .reading => reading_view.render(&g_state) catch |err| {
                     g_state.screen = .error_screen;
                     state_mod.set_error_message(&g_state, "Render", err);
                     g_state.needs_redraw = true;
