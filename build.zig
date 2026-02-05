@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{
         .default_target = .{ .cpu_arch = .wasm32, .os_tag = .wasi },
     });
+    const host_optimize = b.standardOptimizeOption(.{});
     const optimize = std.builtin.OptimizeMode.ReleaseSmall;
 
     const root_mod = b.createModule(.{
@@ -51,9 +52,31 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
+    // CLI tool runnable on host computer for examining xtc files.
+    const xtci_mod = b.createModule(.{
+        .root_source_file = b.path("src/main_xtci.zig"),
+        .target = b.graph.host,
+        .optimize = host_optimize,
+        .strip = false,
+    });
+    const xtci_exe = b.addExecutable(.{
+        .name = "xtci",
+        .root_module = xtci_mod,
+    });
+    const install_xtci = b.addInstallArtifact(xtci_exe, .{});
+    b.getInstallStep().dependOn(&install_xtci.step);
+
+    const xtci_step = b.step("xtci", "Build/install xtci CLI");
+    xtci_step.dependOn(&install_xtci.step);
+
+    const run_xtci = b.addRunArtifact(xtci_exe);
+    if (b.args) |args| run_xtci.addArgs(args);
+    const run_xtci_step = b.step("run-xtci", "Run xtci CLI");
+    run_xtci_step.dependOn(&run_xtci.step);
+
     // Set up unit tests that can be run on host computer.
     const test_mod = b.createModule(.{
-        .root_source_file = b.path("src/test_main.zig"),
+        .root_source_file = b.path("src/main_test.zig"),
         .target = b.graph.host,
         .optimize = .Debug,
         .strip = false,
