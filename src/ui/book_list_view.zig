@@ -72,40 +72,30 @@ fn compute_layout() Layout {
 
 fn draw_progress_donut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Error!void {
     if (r_out <= 0 or r_in <= 0 or r_in >= r_out) return;
-    const segments: usize = 90;
-    const pi: f32 = @floatCast(std.math.pi);
-    const tau: f32 = 2.0 * pi;
-    const start: f32 = pi / 2.0; // 6 o'clock
+    const unread = display.gray4(12);
+    const read = display.gray4(9);
 
-    const unread = display.rgb888(200, 200, 200);
-    const read = display.colors.BLACK;
+    // LovyanGFX fillArc uses degrees with 0 at 3 o'clock (and increases clockwise on screen).
+    // To avoid edge cases where a "full circle" angle span is treated as no-op, draw in two halves.
+    try display.fill_arc(cx, cy, r_out, r_in, 0.0, 180.0, unread);
+    try display.fill_arc(cx, cy, r_out, r_in, 180.0, 360.0, unread);
 
-    const r_in_f: f32 = @floatFromInt(r_in);
-    const r_out_f: f32 = @floatFromInt(r_out);
-    const cx_f: f32 = @floatFromInt(cx);
-    const cy_f: f32 = @floatFromInt(cy);
-
-    for (0..segments) |s| {
-        const t: f32 = start + tau * (@as(f32, @floatFromInt(s)) / @as(f32, @floatFromInt(segments)));
-        const c = @cos(t);
-        const si = @sin(t);
-        const x0: i32 = @intFromFloat(cx_f + c * r_in_f);
-        const y0: i32 = @intFromFloat(cy_f + si * r_in_f);
-        const x1: i32 = @intFromFloat(cx_f + c * r_out_f);
-        const y1: i32 = @intFromFloat(cy_f + si * r_out_f);
-        try display.draw_line(x0, y0, x1, y1, unread);
+    if (progress == 0) return;
+    if (progress >= 100) {
+        try display.fill_arc(cx, cy, r_out, r_in, 0.0, 180.0, read);
+        try display.fill_arc(cx, cy, r_out, r_in, 180.0, 360.0, read);
+        return;
     }
 
-    const filled: usize = @min(segments, (@as(usize, progress) * segments) / 100);
-    for (0..filled) |s| {
-        const t: f32 = start + tau * (@as(f32, @floatFromInt(s)) / @as(f32, @floatFromInt(segments)));
-        const c = @cos(t);
-        const si = @sin(t);
-        const x0: i32 = @intFromFloat(cx_f + c * r_in_f);
-        const y0: i32 = @intFromFloat(cy_f + si * r_in_f);
-        const x1: i32 = @intFromFloat(cx_f + c * r_out_f);
-        const y1: i32 = @intFromFloat(cy_f + si * r_out_f);
-        try display.draw_line(x0, y0, x1, y1, read);
+    const start_deg: f32 = 90.0; // 6 o'clock
+    const sweep_deg: f32 = 360.0 * (@as(f32, @floatFromInt(progress)) / 100.0);
+    const end_deg: f32 = start_deg + sweep_deg;
+
+    if (end_deg <= 360.0) {
+        try display.fill_arc(cx, cy, r_out, r_in, start_deg, end_deg, read);
+    } else {
+        try display.fill_arc(cx, cy, r_out, r_in, start_deg, 360.0, read);
+        try display.fill_arc(cx, cy, r_out, r_in, 0.0, end_deg - 360.0, read);
     }
 }
 
@@ -143,9 +133,7 @@ pub fn render(state: *State) Error!void {
         const square_y = row_y + @divTrunc(layout.row_height - square, 2);
 
         if (square > 0) {
-            const border = display.rgb888(220, 220, 220);
             try display.fill_rect(square_x, square_y, square, square, display.colors.WHITE);
-            try display.draw_rect(square_x, square_y, square, square, border);
 
             const cx = square_x + @divTrunc(square, 2);
             const cy = square_y + @divTrunc(square, 2);
