@@ -12,7 +12,7 @@ pub const TAG_FS: usize = 32; // 1 + 31
 pub const TAG_SLOTS: usize = 8;
 
 pub const HEADER_SIZE: usize = MAGIC_SIZE + 4;
-pub const RECORD_SIZE: usize = TITLE_FS + AUTHOR_FS + 2 + 1 + 1 + TAG_SLOTS * TAG_FS + FILENAME_FS;
+pub const RECORD_SIZE: usize = TITLE_FS + AUTHOR_FS + 2 + 1 + TAG_SLOTS * TAG_FS + FILENAME_FS;
 
 pub const DecodeError = error{
     TooShort,
@@ -27,7 +27,6 @@ pub const BookRecord = struct {
     author: [AUTHOR_FS]u8 = .{0} ** AUTHOR_FS,
     filename: [FILENAME_FS]u8 = .{0} ** FILENAME_FS,
     page_count: u16 = 0,
-    progress: u8 = 0,
     tag_count: u8 = 0,
     tags: [TAG_SLOTS][TAG_FS]u8 = [_][TAG_FS]u8{.{0} ** TAG_FS} ** TAG_SLOTS,
 };
@@ -81,8 +80,6 @@ pub fn encodeCatalogBytes(dst: []u8, books: []const BookRecord) []u8 {
         std.mem.copyForwards(u8, dst[idx .. idx + AUTHOR_FS], b.author[0..]);
         idx += AUTHOR_FS;
         writeU16Le(dst, &idx, b.page_count);
-        dst[idx] = b.progress;
-        idx += 1;
         dst[idx] = b.tag_count;
         idx += 1;
         for (0..TAG_SLOTS) |t| {
@@ -120,8 +117,6 @@ pub fn decodeCatalogBytes(bytes: []const u8, out: []BookRecord) DecodeError!usiz
         std.mem.copyForwards(u8, rec.author[0..], bytes[idx .. idx + AUTHOR_FS]);
         idx += AUTHOR_FS;
         rec.page_count = readU16Le(bytes, &idx);
-        rec.progress = bytes[idx];
-        idx += 1;
         rec.tag_count = bytes[idx];
         idx += 1;
         for (0..TAG_SLOTS) |t| {
@@ -160,24 +155,22 @@ test "FixedString rejects invalid length" {
 }
 
 test "Catalog parse yields records" {
-    var books: [2]BookRecord = .{.{}, .{}};
+    var books: [2]BookRecord = .{ .{}, .{} };
     encodeFixedString(TITLE_FS, &books[0].title, "Title A");
     encodeFixedString(AUTHOR_FS, &books[0].author, "Author Z");
     encodeFixedString(FILENAME_FS, &books[0].filename, "a.xtc");
     books[0].page_count = 10;
-    books[0].progress = 50;
 
     encodeFixedString(TITLE_FS, &books[1].title, "Title B");
     encodeFixedString(AUTHOR_FS, &books[1].author, "Author A");
     encodeFixedString(FILENAME_FS, &books[1].filename, "b.xtc");
     books[1].page_count = 20;
-    books[1].progress = 25;
 
     var buf: [HEADER_SIZE + 2 * RECORD_SIZE]u8 = undefined;
     const encoded = encodeCatalogBytes(buf[0..], books[0..]);
     try std.testing.expectEqual(@as(usize, HEADER_SIZE + 2 * RECORD_SIZE), encoded.len);
 
-    var out: [2]BookRecord = .{.{}, .{}};
+    var out: [2]BookRecord = .{ .{}, .{} };
     const n = try decodeCatalogBytes(encoded, out[0..]);
     try std.testing.expectEqual(@as(usize, 2), n);
 
@@ -188,7 +181,6 @@ test "Catalog parse yields records" {
     };
     try std.testing.expect(std.mem.eql(u8, title0[0..7], "Title A"));
     try std.testing.expectEqual(@as(u16, 10), out[0].page_count);
-    try std.testing.expectEqual(@as(u8, 50), out[0].progress);
 }
 
 test "Catalog rejects bad magic" {
