@@ -25,7 +25,7 @@ pub fn init() Error!void {
     try display.text.set_wrap(false, false);
 
     font.ensure_loaded() catch {};
-    books.scan_books(&g_state);
+    books.load_books(&g_state);
     g_state.needs_redraw = true;
 }
 
@@ -38,13 +38,13 @@ pub fn tick(now_ms: i32) void {
                 .book_list => book_list_view.handle_tap(&g_state, tap),
                 .toc => {
                     if (toc_view.handle_tap(&g_state, tap)) {
-                        books.scan_books(&g_state);
+                        books.load_books(&g_state);
                     }
                 },
                 .reading => reading_view.handle_tap(&g_state, tap),
                 .error_screen => {
                     if (error_view.handle_tap(&g_state, tap)) {
-                        books.scan_books(&g_state);
+                        books.load_books(&g_state);
                     }
                 },
             }

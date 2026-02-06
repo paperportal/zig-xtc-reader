@@ -13,9 +13,11 @@ const reading_position = @import("../reading_position.zig");
 
 const font = @import("font.zig");
 const ui = @import("common.zig");
+const books = @import("../books.zig");
 
-const TITLE: []const u8 = "Books (/sdcard/books)";
+const TITLE: []const u8 = "Books (catalog)";
 const PATH_MAX: usize = 256;
+const REFRESH_LABEL: [:0]const u8 = "Refresh\x00";
 
 const Layout = struct {
     base: ui.BaseLayout,
@@ -23,6 +25,7 @@ const Layout = struct {
     rows: usize,
     prev_rect: ui.Rect,
     next_rect: ui.Rect,
+    refresh_rect: ui.Rect,
     page_pos: ui.Point,
 };
 
@@ -32,17 +35,24 @@ fn compute_layout() Layout {
     const prev_w: i32 = ui.text_width_px(ui.PREV_LABEL) + 2 * ui.BUTTON_PAD_X;
     const next_w: i32 = ui.text_width_px(ui.NEXT_LABEL) + 2 * ui.BUTTON_PAD_X;
     const nav_w: i32 = @max(prev_w, next_w);
+    const refresh_w: i32 = ui.text_width_px(REFRESH_LABEL) + 2 * ui.BUTTON_PAD_X;
 
     const base = ui.compute_base_layout(nav_h);
     const prev_rect = ui.Rect{ .x = base.margin, .y = base.footer_top, .w = nav_w, .h = nav_h };
     const next_rect = ui.Rect{ .x = base.width - base.margin - nav_w, .y = base.footer_top, .w = nav_w, .h = nav_h };
+    const refresh_rect = ui.Rect{
+        .x = @divTrunc(base.width - refresh_w, 2),
+        .y = base.footer_top,
+        .w = refresh_w,
+        .h = nav_h,
+    };
 
-    const page_y = base.footer_top + @divTrunc(nav_h - font_h, 2);
+    const page_y = base.footer_top - font_h - 4;
     const page_pos = ui.Point{ .x = @divTrunc(base.width, 2), .y = page_y };
 
     const list_height = base.content_bottom - base.content_top;
-    var rows: usize = 8;
-    const min_row: i32 = 36;
+    var rows: usize = 6;
+    const min_row: i32 = 56;
     if (@divTrunc(list_height, min_row) < @as(i32, @intCast(rows))) {
         const computed = @max(@as(i32, 1), @divTrunc(list_height, min_row));
         rows = @intCast(computed);
@@ -55,8 +65,48 @@ fn compute_layout() Layout {
         .rows = rows,
         .prev_rect = prev_rect,
         .next_rect = next_rect,
+        .refresh_rect = refresh_rect,
         .page_pos = page_pos,
     };
+}
+
+fn draw_progress_donut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Error!void {
+    if (r_out <= 0 or r_in <= 0 or r_in >= r_out) return;
+    const segments: usize = 90;
+    const pi: f32 = @floatCast(std.math.pi);
+    const tau: f32 = 2.0 * pi;
+    const start: f32 = pi / 2.0; // 6 o'clock
+
+    const unread = display.rgb888(200, 200, 200);
+    const read = display.colors.BLACK;
+
+    const r_in_f: f32 = @floatFromInt(r_in);
+    const r_out_f: f32 = @floatFromInt(r_out);
+    const cx_f: f32 = @floatFromInt(cx);
+    const cy_f: f32 = @floatFromInt(cy);
+
+    for (0..segments) |s| {
+        const t: f32 = start + tau * (@as(f32, @floatFromInt(s)) / @as(f32, @floatFromInt(segments)));
+        const c = @cos(t);
+        const si = @sin(t);
+        const x0: i32 = @intFromFloat(cx_f + c * r_in_f);
+        const y0: i32 = @intFromFloat(cy_f + si * r_in_f);
+        const x1: i32 = @intFromFloat(cx_f + c * r_out_f);
+        const y1: i32 = @intFromFloat(cy_f + si * r_out_f);
+        try display.draw_line(x0, y0, x1, y1, unread);
+    }
+
+    const filled: usize = @min(segments, (@as(usize, progress) * segments) / 100);
+    for (0..filled) |s| {
+        const t: f32 = start + tau * (@as(f32, @floatFromInt(s)) / @as(f32, @floatFromInt(segments)));
+        const c = @cos(t);
+        const si = @sin(t);
+        const x0: i32 = @intFromFloat(cx_f + c * r_in_f);
+        const y0: i32 = @intFromFloat(cy_f + si * r_in_f);
+        const x1: i32 = @intFromFloat(cx_f + c * r_out_f);
+        const y1: i32 = @intFromFloat(cy_f + si * r_out_f);
+        try display.draw_line(x0, y0, x1, y1, read);
+    }
 }
 
 pub fn render(state: *State) Error!void {
@@ -73,6 +123,12 @@ pub fn render(state: *State) Error!void {
 
     try ui.draw_header(TITLE, layout.base);
 
+    // Pre-compute line heights for the two-line row format.
+    _ = try display.text.set_size(1.0, 1.0);
+    const title_h = display.text.font_height();
+    _ = try display.text.set_size(0.85, 0.85);
+    const author_h = display.text.font_height();
+
     const list_start = state.page_index * state.entries_per_page;
     var row: usize = 0;
     while (row < layout.rows) : (row += 1) {
@@ -81,15 +137,45 @@ pub fn render(state: *State) Error!void {
 
         const entry = state.entries[idx];
         const row_y = layout.base.content_top + @as(i32, @intCast(row)) * layout.row_height;
-        const label_x = layout.base.content_left + 6;
-        const label_h = display.text.font_height();
-        const label_y = row_y + @divTrunc(layout.row_height - label_h, 2);
 
-        const name_slice = entry.name[0..@intCast(entry.len)];
-        var label_buf: [96]u8 = undefined;
-        const max_chars = ui.max_chars_for_width(layout.base.content_width - 12);
-        const label = ui.write_truncate_end(&label_buf, name_slice, max_chars);
-        try display.text.draw_cstr(label, label_x, label_y);
+        const square: i32 = @max(@as(i32, 0), @min(layout.row_height - 6, 64));
+        const square_x = layout.base.content_left + 6;
+        const square_y = row_y + @divTrunc(layout.row_height - square, 2);
+
+        if (square > 0) {
+            const border = display.rgb888(220, 220, 220);
+            try display.fill_rect(square_x, square_y, square, square, display.colors.WHITE);
+            try display.draw_rect(square_x, square_y, square, square, border);
+
+            const cx = square_x + @divTrunc(square, 2);
+            const cy = square_y + @divTrunc(square, 2);
+            const r_out = @max(@as(i32, 1), @divTrunc(square, 2) - 2);
+            const r_in = @max(@as(i32, 1), r_out - 7);
+            try draw_progress_donut(cx, cy, r_in, r_out, entry.progress);
+        }
+
+        const text_x = square_x + square + 12;
+        const text_w = (layout.base.content_left + layout.base.content_width) - text_x - 6;
+        const max_chars = ui.max_chars_for_width(text_w);
+
+        const text_total_h: i32 = title_h + 2 + author_h;
+        const text_y0 = row_y + @divTrunc(layout.row_height - text_total_h, 2);
+
+        var title_buf: [96]u8 = undefined;
+        var author_buf: [72]u8 = undefined;
+
+        const title_slice = if (entry.title_len != 0) entry.title[0..@intCast(entry.title_len)] else entry.name[0..@intCast(entry.len)];
+        _ = try display.text.set_size(1.0, 1.0);
+        try display.text.set_color(display.colors.BLACK, display.colors.WHITE);
+        const title_c = ui.write_truncate_end(&title_buf, title_slice, max_chars);
+        try display.text.draw_cstr(title_c, text_x, text_y0);
+
+        _ = try display.text.set_size(0.85, 0.85);
+        try display.text.set_color(display.rgb888(120, 120, 120), display.colors.WHITE);
+        const unknown_author: []const u8 = "Unknown author";
+        const author_slice = if (entry.author_len != 0) entry.author[0..@intCast(entry.author_len)] else unknown_author;
+        const author_c = ui.write_truncate_end(&author_buf, author_slice, max_chars);
+        try display.text.draw_cstr(author_c, text_x, text_y0 + title_h + 2);
 
         const sep_y = row_y + layout.row_height - 2;
         const sep = display.rgb888(140, 140, 140);
@@ -98,13 +184,17 @@ pub fn render(state: *State) Error!void {
     }
 
     if (state.entry_count == 0) {
-        try display.text.draw("(no .xtc/.xtch files found)", layout.base.content_left + 6, layout.base.content_top + 8);
+        try display.text.draw("(no books found)", layout.base.content_left + 6, layout.base.content_top + 8);
     }
+
+    _ = try display.text.set_size(1.0, 1.0);
+    try display.text.set_color(display.colors.BLACK, display.colors.WHITE);
 
     const can_prev = state.page_index > 0;
     const can_next = state.page_index + 1 < state.page_count;
     try ui.draw_button(layout.prev_rect, ui.PREV_LABEL, can_prev);
     try ui.draw_button(layout.next_rect, ui.NEXT_LABEL, can_next);
+    try ui.draw_button(layout.refresh_rect, REFRESH_LABEL, true);
 
     if (state.page_count > 1) {
         var page_buf: [32]u8 = undefined;
@@ -114,7 +204,9 @@ pub fn render(state: *State) Error!void {
             page_buf[n] = 0;
             const page_w = ui.text_width_px(page_buf[0..n :0]);
             const page_x = @divTrunc(layout.base.width - page_w, 2);
-            try display.text.draw_cstr(page_buf[0..n :0], page_x, layout.page_pos.y);
+            if (layout.page_pos.y >= layout.base.content_top) {
+                try display.text.draw_cstr(page_buf[0..n :0], page_x, layout.page_pos.y);
+            }
         }
     }
 
@@ -144,6 +236,12 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
             state.page_index += 1;
             state.needs_redraw = true;
         }
+        return;
+    }
+
+    if (layout.refresh_rect.contains(point.x, point.y)) {
+        books.refresh_books(state);
+        state.needs_redraw = true;
         return;
     }
 

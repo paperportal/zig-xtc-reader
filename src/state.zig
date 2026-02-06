@@ -17,9 +17,21 @@ pub const MAX_NAME: usize = 255;
 
 pub const BOOKS_DIR: [:0]const u8 = "/sdcard/books";
 
+// Display metadata storage limits (not including the on-disk FixedString length prefix).
+pub const TITLE_MAX_BYTES: usize = 95;
+pub const AUTHOR_MAX_BYTES: usize = 63;
+
 pub const Entry = struct {
     name: [MAX_NAME + 1]u8,
     len: u8,
+
+    // These are derived from the catalog (or heuristics on fallback scan).
+    title: [TITLE_MAX_BYTES + 1]u8,
+    title_len: u8,
+    author: [AUTHOR_MAX_BYTES + 1]u8,
+    author_len: u8,
+    page_count: u16,
+    progress: u8, // 0..100
 };
 
 pub const State = struct {
