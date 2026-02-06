@@ -14,6 +14,8 @@ const reading_position = @import("../reading_position.zig");
 const PATH_MAX: usize = 256;
 const PAGE_HEADER_LEN: usize = 22;
 
+var g_page_blob_scratch: []u8 = &[_]u8{};
+
 const LocalError = error{
     PathTooLong,
     UnexpectedEof,
@@ -50,11 +52,14 @@ pub fn render(state: *State) !void {
     const page_w: i32 = @intCast(entry.width);
     const page_h: i32 = @intCast(entry.height);
 
-    try display.fill_screen(display.colors.WHITE);
-
-    if (reader.getBitDepth() == 2) {
+    const bit_depth = reader.getBitDepth();
+    if (bit_depth == 2) {
+        try display.fill_screen(display.colors.WHITE);
         try render_xth(&file, entry.data_offset, page_w, page_h);
-    } else if (reader.getBitDepth() == 1) {
+    } else if (bit_depth == 1) {
+        const prev_mode = display.epd.get_mode();
+        defer _ = display.epd.set_mode(prev_mode) catch {};
+        _ = display.epd.set_mode(display.epd.TEXT) catch {};
         try render_xtg(&file, entry.data_offset, page_w, page_h);
     } else {
         return LocalError.UnsupportedFormat;
@@ -147,18 +152,61 @@ fn render_xtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !
     if (hdr.color_mode != 0 or hdr.compression != 0) return LocalError.InvalidPageHeader;
     if (@as(i32, @intCast(hdr.width)) != page_w or @as(i32, @intCast(hdr.height)) != page_h) return LocalError.InvalidPageHeader;
 
+    const decoded_w: i32 = @intCast(hdr.width);
+    const decoded_h: i32 = @intCast(hdr.height);
+    const disp_w = display.width();
+    const disp_h = display.height();
+    if (disp_w <= 0 or disp_h <= 0) return LocalError.InvalidPageHeader;
+
+    const draw_w: i32 = @min(decoded_w, disp_w);
+    const draw_h: i32 = @min(decoded_h, disp_h);
+    const dst_x0: i32 = if (disp_w > draw_w) @divTrunc(disp_w - draw_w, 2) else 0;
+    const dst_y0: i32 = if (disp_h > draw_h) @divTrunc(disp_h - draw_h, 2) else 0;
+
+    // Most book pages are full-screen; skip clearing in that case to avoid redundant writes.
+    if (draw_w != disp_w or draw_h != disp_h) {
+        try display.fill_screen(display.colors.WHITE);
+    }
+
     const w_u64: u64 = hdr.width;
     const h_u64: u64 = hdr.height;
     const row_bytes: u64 = (w_u64 + 7) / 8;
-    const blob_size_u64: u64 = PAGE_HEADER_LEN + (row_bytes * h_u64);
+    const data_size_u64: u64 = row_bytes * h_u64;
+    if (data_size_u64 > std.math.maxInt(u32)) return LocalError.TooLarge;
+    if (hdr.data_size != @as(u32, @intCast(data_size_u64))) return LocalError.InvalidPageHeader;
+
+    // `push_image` validates tightly packed bitmaps (no row-end pad bits). XTG stores row-padded data,
+    // so only use direct push when width is byte-aligned; otherwise fall back to the host decoder path.
+    const can_push_direct = draw_w == decoded_w and draw_h == decoded_h and (hdr.width % 8 == 0);
+    if (can_push_direct) {
+        if (data_size_u64 > std.math.maxInt(usize)) return LocalError.TooLarge;
+        const data_size: usize = @intCast(data_size_u64);
+        const image_offset = std.math.add(u64, page_blob_offset, PAGE_HEADER_LEN) catch return LocalError.SeekTooLarge;
+        var image_buf = try ensure_scratch_buffer(data_size);
+        try read_exact_at(file, image_offset, image_buf[0..data_size]);
+
+        const palette = [_]u32{
+            @as(u32, @bitCast(display.colors.WHITE)),
+            @as(u32, @bitCast(display.colors.BLACK)),
+        };
+        try display.image.push_image(
+            dst_x0,
+            dst_y0,
+            decoded_w,
+            decoded_h,
+            display.color_depth.grayscale_1bit,
+            image_buf[0..data_size],
+            palette[0..],
+        );
+        return;
+    }
+
+    const blob_size_u64: u64 = PAGE_HEADER_LEN + data_size_u64;
     if (blob_size_u64 > std.math.maxInt(usize)) return LocalError.TooLarge;
     const blob_size: usize = @intCast(blob_size_u64);
-    const allocator = std.heap.wasm_allocator;
-    var xtg_buf = try allocator.alloc(u8, blob_size);
-    defer allocator.free(xtg_buf);
-
-    try read_exact_at(file, page_blob_offset, xtg_buf[0..]);
-    try display.image.draw_xtg_centered(xtg_buf[0..]);
+    var xtg_buf = try ensure_scratch_buffer(blob_size);
+    try read_exact_at(file, page_blob_offset, xtg_buf[0..blob_size]);
+    try display.image.draw_xtg_centered(xtg_buf[0..blob_size]);
 }
 
 const PageHeader = struct {
@@ -184,12 +232,21 @@ fn render_xth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !
     const blob_size_u64: u64 = PAGE_HEADER_LEN + (plane_size * 2);
     if (blob_size_u64 > std.math.maxInt(usize)) return LocalError.TooLarge;
     const blob_size: usize = @intCast(blob_size_u64);
-    const allocator = std.heap.wasm_allocator;
-    var xth_buf = try allocator.alloc(u8, blob_size);
-    defer allocator.free(xth_buf);
+    var xth_buf = try ensure_scratch_buffer(blob_size);
+    try read_exact_at(file, page_blob_offset, xth_buf[0..blob_size]);
+    try display.image.draw_xth_centered(xth_buf[0..blob_size]);
+}
 
-    try read_exact_at(file, page_blob_offset, xth_buf[0..]);
-    try display.image.draw_xth_centered(xth_buf[0..]);
+fn ensure_scratch_buffer(size: usize) ![]u8 {
+    if (g_page_blob_scratch.len < size) {
+        const allocator = std.heap.wasm_allocator;
+        if (g_page_blob_scratch.len == 0) {
+            g_page_blob_scratch = try allocator.alloc(u8, size);
+        } else {
+            g_page_blob_scratch = try allocator.realloc(g_page_blob_scratch, size);
+        }
+    }
+    return g_page_blob_scratch[0..size];
 }
 
 fn read_page_header(file: *fs.File, offset: u64) !PageHeader {
