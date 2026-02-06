@@ -2,12 +2,13 @@
     .name = .zig_app_template,
     .version = "0.0.0",
     .dependencies = .{
-        .structured_text = .{
-            .path = "../modules/zig-structured-text",
-        },
         .paper_portal_sdk = .{
             .url = "git+https://github.com/paperportal/zig-sdk#dbc2788291553a30180083fb1f54ee7f0210fb7f",
             .hash = "paper_portal_sdk-0.0.0-TiKtz34WAgCs6Qx6jftK8EjMsi_a5Ui4cNb_4Zlr44ki",
+        },
+        .paper_portal_sdk_local = .{
+            .path = "../zig-sdk",
+            .lazy = true,
         },
     },
     .paths = .{""},

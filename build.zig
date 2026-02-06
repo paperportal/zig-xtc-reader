@@ -38,7 +38,12 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const sdk_dep = b.dependency("paper_portal_sdk", .{});
+    // Prefer to use local Paper Portal SDK if it exists.
+    const sdk_dep = if (dirExists(b, "../zig-sdk"))
+        (b.lazyDependency("paper_portal_sdk_local", .{}) orelse @panic("paper_portal_sdk_local missing"))
+    else
+        b.dependency("paper_portal_sdk", .{});
+
     const sdk = b.createModule(.{
         .root_source_file = sdk_dep.path("sdk.zig"),
         .target = target,
@@ -88,4 +93,9 @@ pub fn build(b: *std.Build) void {
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
+}
+
+fn dirExists(b: *std.Build, rel: []const u8) bool {
+    std.Io.Dir.cwd().access(b.graph.io, rel, .{}) catch return false;
+    return true;
 }
