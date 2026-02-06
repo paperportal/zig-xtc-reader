@@ -6,8 +6,8 @@
             .path = "../modules/zig-structured-text",
         },
         .paper_portal_sdk = .{
-            .url = "git+https://github.com/paperportal/zig-sdk#e94d47b4a115d4b5cc6753466bcfd3f1bc97e3c6",
-            .hash = "paper_portal_sdk-0.0.0-TiKtz13mAQAK1cnW1qYQ5vxVPJhu2PA-fOMUiLHZEZ3v",
+            .url = "git+https://github.com/paperportal/zig-sdk#25b29ca7a006372d06d04100db4ecca6b692b49e",
+            .hash = "paper_portal_sdk-0.0.0-TiKtzyQVAgDH87Gokj_rLeiyc6QHUE2vqfijOA-zVW5h",
         },
     },
     .paths = .{""},

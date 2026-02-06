@@ -10,6 +10,7 @@ const State = state_mod.State;
 
 const xtc_reader = @import("../xtc_reader.zig");
 const reading_position = @import("../reading_position.zig");
+const xtg_bits = @import("../xtg_bits.zig");
 
 const PATH_MAX: usize = 256;
 const PAGE_HEADER_LEN: usize = 22;
@@ -97,6 +98,11 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
         }
         return;
     }
+
+    // Center tap returns to the in-book index (TOC) without losing position.
+    store_current_page(state);
+    state.screen = .toc;
+    state.needs_redraw = true;
 }
 
 fn store_current_page(state: *const State) void {
@@ -149,11 +155,25 @@ fn render_xtg(reader: anytype, page_index: u32, page_w: i32, page_h: i32, x0: i3
     const screen_w = display.width();
     const screen_h = display.height();
 
-    const x_vis_start: usize = if (x0 < 0) @intCast(-x0) else 0;
-    const x_vis_end: usize = @intCast(@min(page_w, screen_w - x0));
-    const y_vis_start: usize = if (y0 < 0) @intCast(-y0) else 0;
-    const y_vis_end: usize = @intCast(@min(page_h, screen_h - y0));
+    const x_vis_start_i: i32 = if (x0 < 0) -x0 else 0;
+    var x_vis_end_i: i32 = screen_w - x0;
+    if (x_vis_end_i > page_w) x_vis_end_i = page_w;
+    if (x_vis_end_i < 0) x_vis_end_i = 0;
+
+    const y_vis_start_i: i32 = if (y0 < 0) -y0 else 0;
+    var y_vis_end_i: i32 = screen_h - y0;
+    if (y_vis_end_i > page_h) y_vis_end_i = page_h;
+    if (y_vis_end_i < 0) y_vis_end_i = 0;
+
+    const x_vis_start: usize = @intCast(x_vis_start_i);
+    const x_vis_end: usize = @intCast(x_vis_end_i);
+    const y_vis_start: usize = @intCast(y_vis_start_i);
+    const y_vis_end: usize = @intCast(y_vis_end_i);
     if (x_vis_end <= x_vis_start or y_vis_end <= y_vis_start) return;
+
+    const vis_w: usize = x_vis_end - x_vis_start;
+    const vis_h: usize = y_vis_end - y_vis_start;
+    if (vis_w == 0 or vis_h == 0) return;
 
     const row_bytes: usize = (w + 7) / 8;
     if (row_bytes == 0) return;
@@ -162,12 +182,44 @@ fn render_xtg(reader: anytype, page_index: u32, page_w: i32, page_h: i32, x0: i3
     const row_buf = try allocator.alloc(u8, row_bytes);
     defer allocator.free(row_buf);
 
+    const palette_bw = [_]u32{
+        @intCast(display.colors.BLACK),
+        @intCast(display.colors.WHITE),
+    };
+
+    const main_w: usize = if (vis_w >= 8) (vis_w & ~@as(usize, 7)) else 0;
+    const main_row_bytes: usize = main_w / 8;
+    const out_row_bytes: usize = if (main_row_bytes != 0) main_row_bytes else 1;
+    const out_row_buf = try allocator.alloc(u8, out_row_bytes);
+    defer allocator.free(out_row_buf);
+
+    const main_len_u64: u64 = @as(u64, main_row_bytes) * @as(u64, vis_h);
+    if (main_len_u64 > std.math.maxInt(usize)) return LocalError.TooLarge;
+    const main_buf = if (main_row_bytes != 0)
+        try allocator.alloc(u8, @intCast(main_len_u64))
+    else
+        out_row_buf[0..0];
+    defer if (main_row_bytes != 0) allocator.free(main_buf);
+    if (main_row_bytes != 0) @memset(main_buf, 0xFF);
+
+    const has_tail: bool = (vis_w >= 8) and (main_w != vis_w);
+    const tail_buf = if (has_tail) try allocator.alloc(u8, vis_h) else out_row_buf[0..0];
+    defer if (has_tail) allocator.free(tail_buf);
+    if (has_tail) @memset(tail_buf, 0xFF);
+
+    const x_start_byte: usize = x_vis_start / 8;
+    const x_bit_off: u3 = @intCast(x_vis_start & 7);
+    const tail_x_vis_start: usize = if (has_tail) (x_vis_start + vis_w - 8) else 0;
+    const tail_x_start_byte: usize = tail_x_vis_start / 8;
+    const tail_x_bit_off: u3 = @intCast(tail_x_vis_start & 7);
+    const dst_x: i32 = x0 + @as(i32, @intCast(x_vis_start));
+    const dst_y0: i32 = y0 + @as(i32, @intCast(y_vis_start));
+    const dst_x_tail: i32 = if (has_tail) (dst_x + @as(i32, @intCast(vis_w - 8))) else 0;
+
     var scratch: [2048]u8 = undefined;
-    var ctx = XtgCtx{
+    var ctx = XtgPushCtx{
         .page_w = w,
         .page_h = h,
-        .x0 = x0,
-        .y0 = y0,
         .x_vis_start = x_vis_start,
         .x_vis_end = x_vis_end,
         .y_vis_start = y_vis_start,
@@ -176,18 +228,56 @@ fn render_xtg(reader: anytype, page_index: u32, page_w: i32, page_h: i32, x0: i3
         .row_buf = row_buf,
         .row_off = 0,
         .row_index = 0,
+        .dst_x = dst_x,
+        .dst_y0 = dst_y0,
+        .vis_w = vis_w,
+        .vis_h = vis_h,
+        .out_row_buf = out_row_buf,
+        .x_start_byte = x_start_byte,
+        .x_bit_off = x_bit_off,
+        .main_w = main_w,
+        .main_row_bytes = main_row_bytes,
+        .main_buf = main_buf,
+        .has_tail = has_tail,
+        .dst_x_tail = dst_x_tail,
+        .tail_x_vis_start = tail_x_vis_start,
+        .tail_x_start_byte = tail_x_start_byte,
+        .tail_x_bit_off = tail_x_bit_off,
+        .tail_buf = tail_buf,
+        .palette_bw = palette_bw[0..],
     };
 
     try reader.streamPage(page_index, scratch[0..], on_xtg_chunk, &ctx);
     if (ctx.row_off != 0) return LocalError.InvalidPageHeader;
     if (ctx.row_index != h) return LocalError.InvalidPageHeader;
+
+    if (main_row_bytes != 0) {
+        try display.image.push_image(
+            dst_x,
+            dst_y0,
+            @intCast(main_w),
+            @intCast(vis_h),
+            display.color_depth.grayscale_1bit,
+            main_buf,
+            palette_bw[0..],
+        );
+    }
+    if (has_tail) {
+        try display.image.push_image(
+            dst_x_tail,
+            dst_y0,
+            8,
+            @intCast(vis_h),
+            display.color_depth.grayscale_1bit,
+            tail_buf,
+            palette_bw[0..],
+        );
+    }
 }
 
-const XtgCtx = struct {
+const XtgPushCtx = struct {
     page_w: usize,
     page_h: usize,
-    x0: i32,
-    y0: i32,
     x_vis_start: usize,
     x_vis_end: usize,
     y_vis_start: usize,
@@ -196,9 +286,30 @@ const XtgCtx = struct {
     row_buf: []u8,
     row_off: usize,
     row_index: usize,
+
+    dst_x: i32,
+    dst_y0: i32,
+    vis_w: usize,
+    vis_h: usize,
+    out_row_buf: []u8,
+    x_start_byte: usize,
+    x_bit_off: u3,
+
+    main_w: usize,
+    main_row_bytes: usize,
+    main_buf: []u8,
+
+    has_tail: bool,
+    dst_x_tail: i32,
+    tail_x_vis_start: usize,
+    tail_x_start_byte: usize,
+    tail_x_bit_off: u3,
+    tail_buf: []u8,
+
+    palette_bw: []const u32,
 };
 
-fn on_xtg_chunk(ctx: *XtgCtx, chunk: []const u8, _: usize) !void {
+fn on_xtg_chunk(ctx: *XtgPushCtx, chunk: []const u8, _: usize) !void {
     var off: usize = 0;
     while (off < chunk.len) {
         if (ctx.row_index >= ctx.page_h) return LocalError.InvalidPageHeader;
@@ -210,41 +321,55 @@ fn on_xtg_chunk(ctx: *XtgCtx, chunk: []const u8, _: usize) !void {
         off += take;
 
         if (ctx.row_off == ctx.row_bytes) {
-            try draw_xtg_row(ctx, ctx.row_index, ctx.row_buf);
+            try push_xtg_row(ctx, ctx.row_index, ctx.row_buf);
             ctx.row_index += 1;
             ctx.row_off = 0;
         }
     }
 }
 
-fn draw_xtg_row(ctx: *const XtgCtx, y: usize, row: []const u8) !void {
+fn push_xtg_row(ctx: *XtgPushCtx, y: usize, row: []const u8) !void {
     if (y < ctx.y_vis_start or y >= ctx.y_vis_end) return;
 
-    const screen_y: i32 = ctx.y0 + @as(i32, @intCast(y));
-    if (screen_y < 0 or screen_y >= display.height()) return;
+    const row_vis_index: usize = y - ctx.y_vis_start;
+    if (row_vis_index >= ctx.vis_h) return LocalError.InvalidPageHeader;
 
-    var x: usize = ctx.x_vis_start;
-    while (x < ctx.x_vis_end) {
-        if (is_xtg_black(row, x)) {
-            const start = x;
-            x += 1;
-            while (x < ctx.x_vis_end and is_xtg_black(row, x)) : (x += 1) {}
-            const run_len: i32 = @intCast(x - start);
-            const screen_x: i32 = ctx.x0 + @as(i32, @intCast(start));
-            if (run_len > 0) {
-                try display.draw_fast_hline(screen_x, screen_y, run_len, display.colors.BLACK);
-            }
+    if (ctx.main_row_bytes == 0) {
+        xtg_bits.crop_row_1bpp_msb(ctx.out_row_buf[0..1], row, ctx.x_vis_start, ctx.vis_w);
+        const dst_y: i32 = ctx.dst_y0 + @as(i32, @intCast(row_vis_index));
+        try display.image.push_image(
+            ctx.dst_x,
+            dst_y,
+            @intCast(ctx.vis_w),
+            1,
+            display.color_depth.grayscale_1bit,
+            ctx.out_row_buf[0..1],
+            ctx.palette_bw,
+        );
+        return;
+    }
+
+    const dst_off = row_vis_index * ctx.main_row_bytes;
+    const dst_end = dst_off + ctx.main_row_bytes;
+    if (dst_end > ctx.main_buf.len) return LocalError.InvalidPageHeader;
+
+    if (ctx.x_bit_off == 0) {
+        const row_slice = row[ctx.x_start_byte .. ctx.x_start_byte + ctx.main_row_bytes];
+        std.mem.copyForwards(u8, ctx.main_buf[dst_off..dst_end], row_slice);
+    } else {
+        xtg_bits.crop_row_1bpp_msb(ctx.out_row_buf[0..ctx.main_row_bytes], row, ctx.x_vis_start, ctx.main_w);
+        std.mem.copyForwards(u8, ctx.main_buf[dst_off..dst_end], ctx.out_row_buf[0..ctx.main_row_bytes]);
+    }
+
+    if (ctx.has_tail) {
+        if (row_vis_index >= ctx.tail_buf.len) return LocalError.InvalidPageHeader;
+        if (ctx.tail_x_bit_off == 0) {
+            ctx.tail_buf[row_vis_index] = row[ctx.tail_x_start_byte];
         } else {
-            x += 1;
+            xtg_bits.crop_row_1bpp_msb(ctx.out_row_buf[0..1], row, ctx.tail_x_vis_start, 8);
+            ctx.tail_buf[row_vis_index] = ctx.out_row_buf[0];
         }
     }
-}
-
-fn is_xtg_black(row: []const u8, x: usize) bool {
-    const byte_index = x / 8;
-    const bit_index: u3 = @intCast(7 - (x % 8));
-    const bit: u1 = @intCast((row[byte_index] >> bit_index) & 1);
-    return bit == 0;
 }
 
 const PageHeader = struct {

@@ -2,16 +2,20 @@ const std = @import("std");
 const sdk = @import("paper_portal_sdk");
 
 const display = sdk.display;
+const fs = sdk.fs;
 const touch = sdk.touch;
 const Error = sdk.errors.Error;
 
 const state_mod = @import("../state.zig");
 const State = state_mod.State;
+const xtc_reader = @import("../xtc_reader.zig");
+const reading_position = @import("../reading_position.zig");
 
 const font = @import("font.zig");
 const ui = @import("common.zig");
 
 const TITLE: []const u8 = "Books (/sdcard/books)";
+const PATH_MAX: usize = 256;
 
 const Layout = struct {
     base: ui.BaseLayout,
@@ -158,6 +162,66 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
     state.selected_name[n] = 0;
     state.selected_len = entry.len;
 
-    state.screen = .toc;
+    if (load_valid_saved_page_index(state)) |saved_page| {
+        state.reading_page_index = saved_page;
+        state.reading_restore_pending = false;
+        state.screen = .reading;
+    } else {
+        state.screen = .toc;
+    }
     state.needs_redraw = true;
 }
+
+fn load_valid_saved_page_index(state: *const State) ?u32 {
+    const name = state.selected_name[0..@intCast(state.selected_len)];
+    const saved = reading_position.load_page_index(name) orelse return null;
+    const page_count = load_book_page_count(state) orelse return null;
+    if (saved >= page_count) return null;
+    return saved;
+}
+
+fn load_book_page_count(state: *const State) ?u32 {
+    var path_buf: [PATH_MAX]u8 = undefined;
+    const path = build_book_path(&path_buf, state) catch return null;
+
+    var file = fs.File.open(path, fs.FS_READ) catch return null;
+    defer file.close() catch {};
+
+    var stream = FileStream{ .file = &file };
+    var reader = xtc_reader.XtcReader(FileStream).init(&stream) catch return null;
+    return reader.getPageCount();
+}
+
+fn build_book_path(out: []u8, state: *const State) ![:0]const u8 {
+    const name = state.selected_name[0..@intCast(state.selected_len)];
+    if (name.len == 0) return error.PathTooLong;
+
+    var idx: usize = 0;
+    const base = state_mod.BOOKS_DIR;
+    if (idx + base.len + 1 >= out.len) return error.PathTooLong;
+    std.mem.copyForwards(u8, out[idx .. idx + base.len], base);
+    idx += base.len;
+
+    out[idx] = '/';
+    idx += 1;
+
+    if (idx + name.len >= out.len) return error.PathTooLong;
+    std.mem.copyForwards(u8, out[idx .. idx + name.len], name);
+    idx += name.len;
+
+    out[idx] = 0;
+    return out[0..idx :0];
+}
+
+const FileStream = struct {
+    file: *fs.File,
+
+    pub fn seekTo(self: *FileStream, pos: u64) !void {
+        if (pos > @as(u64, std.math.maxInt(i32))) return error.SeekTooLarge;
+        _ = try self.file.seek(.{ .Start = @intCast(pos) });
+    }
+
+    pub fn read(self: *FileStream, buf: []u8) !usize {
+        return self.file.read(buf);
+    }
+};
