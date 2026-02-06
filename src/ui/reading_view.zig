@@ -9,6 +9,7 @@ const state_mod = @import("../state.zig");
 const State = state_mod.State;
 
 const xtc_reader = @import("../xtc_reader.zig");
+const reading_position = @import("../reading_position.zig");
 
 const PATH_MAX: usize = 256;
 const PAGE_HEADER_LEN: usize = 22;
@@ -34,6 +35,13 @@ pub fn render(state: *State) !void {
     state.reading_page_count = reader.getPageCount();
 
     if (state.reading_page_count == 0) return LocalError.InvalidPageHeader;
+    if (state.reading_restore_pending) {
+        state.reading_restore_pending = false;
+        const name = state.selected_name[0..@intCast(state.selected_len)];
+        if (reading_position.load_page_index(name)) |saved| {
+            state.reading_page_index = saved;
+        }
+    }
     if (state.reading_page_index >= state.reading_page_count) {
         state.reading_page_index = state.reading_page_count - 1;
     }
@@ -70,11 +78,13 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
 
     if (point.x < left_third_max) {
         if (state.reading_page_index == 0) {
+            store_current_page(state);
             state.screen = .toc;
             state.needs_redraw = true;
             return;
         }
         state.reading_page_index -= 1;
+        store_current_page(state);
         state.needs_redraw = true;
         return;
     }
@@ -82,10 +92,19 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
     if (point.x >= right_third_min) {
         if (state.reading_page_index + 1 < state.reading_page_count) {
             state.reading_page_index += 1;
+            store_current_page(state);
             state.needs_redraw = true;
         }
         return;
     }
+}
+
+fn store_current_page(state: *const State) void {
+    if (state.selected_len == 0) return;
+    if (state.reading_page_count == 0) return;
+
+    const name = state.selected_name[0..@intCast(state.selected_len)];
+    reading_position.store_page_index(name, state.reading_page_index);
 }
 
 fn build_book_path(out: []u8, state: *const State) ![:0]const u8 {

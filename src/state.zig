@@ -39,6 +39,7 @@ pub const State = struct {
 
     reading_page_index: u32 = 0,
     reading_page_count: u16 = 1,
+    reading_restore_pending: bool = false,
 
     error_message: [120]u8 = .{0} ** 120,
 };

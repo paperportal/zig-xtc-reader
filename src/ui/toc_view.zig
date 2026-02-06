@@ -55,6 +55,7 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) bool {
 
     if (point.x >= right_third_min) {
         state.reading_page_index = 0;
+        state.reading_restore_pending = true;
         state.screen = .reading;
         state.needs_redraw = true;
         return false;
