@@ -2,15 +2,13 @@ const sdk = @import("paper_portal_sdk");
 
 const display = sdk.display;
 const touch = sdk.touch;
-const Error = sdk.errors.Error;
-
 const state_mod = @import("../state.zig");
 const State = state_mod.State;
 
 const font = @import("font.zig");
 const ui = @import("common.zig");
 
-pub fn render(state: *State) Error!void {
+pub fn render(state: *State) !void {
     try display.fill_screen(display.colors.WHITE);
     font.ensure_loaded() catch {};
     try display.text.set_size(1.0, 1.0);
@@ -36,13 +34,31 @@ pub fn render(state: *State) Error!void {
     try display.text.draw("3. Chapter 2", base.content_left, y0 + 2 * line_h);
     try display.text.draw("4. Chapter 3", base.content_left, y0 + 3 * line_h);
 
-    try display.text.draw("(tap anywhere to go back)", base.content_left, base.height - base.margin - 24);
+    try display.text.draw("(left: back, right: read)", base.content_left, base.height - base.margin - 24);
 
     try display.update();
     display.wait_update();
 }
 
-pub fn handle_tap(_: *State, _: touch.TouchPoint) bool {
-    // Any tap goes back to the book list; caller can decide to refresh the listing.
-    return true;
+pub fn handle_tap(state: *State, point: touch.TouchPoint) bool {
+    const w = display.width();
+    if (w <= 0) return false;
+
+    const left_third_max = @divTrunc(w, 3);
+    const right_third_min = @divTrunc(2 * w, 3);
+
+    if (point.x < left_third_max) {
+        state.screen = .book_list;
+        state.needs_redraw = true;
+        return true; // refresh scan
+    }
+
+    if (point.x >= right_third_min) {
+        state.reading_page_index = 0;
+        state.screen = .reading;
+        state.needs_redraw = true;
+        return false;
+    }
+
+    return false;
 }
