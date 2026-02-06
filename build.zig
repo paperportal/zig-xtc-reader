@@ -32,9 +32,9 @@ pub fn build(b: *std.Build) void {
 
     _ = ppsdk.addWasmPortalPackage(b, exe, .{
         .manifest = .{
-            .id = "00000000-0000-0000-0000-000000000000",
-            .name = "Zig App Template",
-            .version = "0.0.0",
+            .id = "bd55bbdc-41ec-497a-a02f-f3a1ba25dac0",
+            .name = "XTC Reader",
+            .version = "0.1.0",
         },
     });
 

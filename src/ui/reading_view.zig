@@ -65,8 +65,8 @@ pub fn render(state: *State) !void {
         return LocalError.UnsupportedFormat;
     }
 
-    try display.update();
-    display.wait_update();
+    //    try display.update();
+    //    display.wait_update();
 }
 
 pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
