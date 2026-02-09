@@ -8,12 +8,11 @@ const Error = sdk.errors.Error;
 const state_mod = @import("../state.zig");
 const State = state_mod.State;
 
-const font = @import("font.zig");
 const ui = @import("common.zig");
 
 pub fn render(state: *State) Error!void {
     try display.fill_screen(display.colors.WHITE);
-    font.ensure_loaded() catch {};
+    try display.vlw.use_system(display.vlw.SystemFont.inter);
     try display.text.set_size(1.0, 1.0);
     try display.text.set_color(display.colors.BLACK, display.colors.WHITE);
 

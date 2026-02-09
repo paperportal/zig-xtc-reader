@@ -11,7 +11,6 @@ const State = state_mod.State;
 const xtc_reader = @import("../xtc_reader.zig");
 const reading_position = @import("../reading_position.zig");
 
-const font = @import("font.zig");
 const ui = @import("common.zig");
 const books = @import("../books.zig");
 
@@ -101,7 +100,7 @@ fn draw_progress_donut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Er
 
 pub fn render(state: *State) Error!void {
     try display.fill_screen(display.colors.WHITE);
-    font.ensure_loaded() catch {};
+    try display.vlw.use_system(display.vlw.SystemFont.inter);
     try display.text.set_size(1.0, 1.0);
     try display.text.set_color(display.colors.BLACK, display.colors.WHITE);
 
@@ -207,7 +206,6 @@ pub fn render(state: *State) Error!void {
 }
 
 pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
-    font.ensure_loaded() catch {};
     _ = display.text.set_size(1.0, 1.0) catch {};
     const layout = compute_layout();
 
