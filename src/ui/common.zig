@@ -44,7 +44,7 @@ pub const BaseLayout = struct {
     footer_h: i32,
 };
 
-pub fn compute_base_layout(footer_h: i32) BaseLayout {
+pub fn computeBaseLayout(footer_h: i32) BaseLayout {
     const w = display.width();
     const h = display.height();
     const margin = MARGIN;
@@ -75,7 +75,7 @@ pub fn compute_base_layout(footer_h: i32) BaseLayout {
     };
 }
 
-pub fn max_chars_for_width(width: i32) usize {
+pub fn maxCharsForWidth(width: i32) usize {
     if (width <= 0) return 0;
     const char_w: i32 = 8;
     const raw = @divTrunc(width, char_w);
@@ -83,11 +83,11 @@ pub fn max_chars_for_width(width: i32) usize {
     return @intCast(raw);
 }
 
-pub fn text_width_px(text: [:0]const u8) i32 {
-    return display.text.text_width(text) catch @as(i32, @intCast(text.len)) * 8;
+pub fn textWidthPx(text: [:0]const u8) i32 {
+    return display.text.textWidth(text) catch @as(i32, @intCast(text.len)) * 8;
 }
 
-pub fn write_truncate_end(out: []u8, text: []const u8, max_chars: usize) [:0]const u8 {
+pub fn writeTruncateEnd(out: []u8, text: []const u8, max_chars: usize) [:0]const u8 {
     if (out.len == 0) return out[0..0 :0];
     if (max_chars == 0) {
         out[0] = 0;
@@ -116,29 +116,29 @@ pub fn write_truncate_end(out: []u8, text: []const u8, max_chars: usize) [:0]con
     return out[0..cap :0];
 }
 
-pub fn draw_header(title: []const u8, base: BaseLayout) Error!void {
-    const title_h = display.text.font_height();
+pub fn drawHeader(title: []const u8, base: BaseLayout) Error!void {
+    const title_h = display.text.fontHeight();
     const title_y = base.header_top + @divTrunc(base.header_h - title_h, 2);
     try display.text.draw(title, base.title_pos.x, title_y);
 
     const header_sep_y = base.header_top + base.header_h;
     const header_sep = display.rgb888(90, 90, 90);
-    try display.draw_fast_hline(base.content_left, header_sep_y, base.content_width, header_sep);
+    try display.drawFastHline(base.content_left, header_sep_y, base.content_width, header_sep);
 }
 
-pub fn draw_button(rect: Rect, label: [:0]const u8, enabled: bool) Error!void {
+pub fn drawButton(rect: Rect, label: [:0]const u8, enabled: bool) Error!void {
     const bg = if (enabled) display.colors.WHITE else display.colors.LIGHT_GRAY;
     const fg = display.colors.BLACK;
     const border = if (enabled) display.colors.BLACK else display.rgb888(120, 120, 120);
 
-    try display.fill_rect(rect.x, rect.y, rect.w, rect.h, bg);
-    try display.draw_rect(rect.x, rect.y, rect.w, rect.h, border);
-    try display.text.set_color(fg, bg);
+    try display.fillRect(rect.x, rect.y, rect.w, rect.h, bg);
+    try display.drawRect(rect.x, rect.y, rect.w, rect.h, border);
+    try display.text.setColor(fg, bg);
 
-    const label_w = text_width_px(label);
-    const label_h = display.text.font_height();
+    const label_w = textWidthPx(label);
+    const label_h = display.text.fontHeight();
     const label_x = rect.x + @divTrunc(rect.w - label_w, 2);
     const label_y = rect.y + @divTrunc(rect.h - label_h, 2);
-    try display.text.draw_cstr(label, label_x, label_y);
+    try display.text.drawCstr(label, label_x, label_y);
 }
 

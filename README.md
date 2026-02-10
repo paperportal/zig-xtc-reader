@@ -18,3 +18,7 @@ This repo also includes a small host (native) command line tool target named `xt
 - Build/install: `zig build xtci`
 - Run via build system: `zig build run-xtci`
 - Run directly after install: `./zig-out/bin/xtci`
+
+## Naming conventions (Zig)
+
+Use `lowerCamelCase` for all functions, except functions that return a type (Zig), which use `PascalCase`.

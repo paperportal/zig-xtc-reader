@@ -28,15 +28,15 @@ const Layout = struct {
     page_pos: ui.Point,
 };
 
-fn compute_layout() Layout {
-    const font_h = display.text.font_height();
+fn computeLayout() Layout {
+    const font_h = display.text.fontHeight();
     const nav_h: i32 = font_h + 2 * ui.BUTTON_PAD_Y;
-    const prev_w: i32 = ui.text_width_px(ui.PREV_LABEL) + 2 * ui.BUTTON_PAD_X;
-    const next_w: i32 = ui.text_width_px(ui.NEXT_LABEL) + 2 * ui.BUTTON_PAD_X;
+    const prev_w: i32 = ui.textWidthPx(ui.PREV_LABEL) + 2 * ui.BUTTON_PAD_X;
+    const next_w: i32 = ui.textWidthPx(ui.NEXT_LABEL) + 2 * ui.BUTTON_PAD_X;
     const nav_w: i32 = @max(prev_w, next_w);
-    const refresh_w: i32 = ui.text_width_px(REFRESH_LABEL) + 2 * ui.BUTTON_PAD_X;
+    const refresh_w: i32 = ui.textWidthPx(REFRESH_LABEL) + 2 * ui.BUTTON_PAD_X;
 
-    const base = ui.compute_base_layout(nav_h);
+    const base = ui.computeBaseLayout(nav_h);
     const prev_rect = ui.Rect{ .x = base.margin, .y = base.footer_top, .w = nav_w, .h = nav_h };
     const next_rect = ui.Rect{ .x = base.width - base.margin - nav_w, .y = base.footer_top, .w = nav_w, .h = nav_h };
     const refresh_rect = ui.Rect{
@@ -69,20 +69,20 @@ fn compute_layout() Layout {
     };
 }
 
-fn draw_progress_donut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Error!void {
+fn drawProgressDonut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Error!void {
     if (r_out <= 0 or r_in <= 0 or r_in >= r_out) return;
     const unread = display.gray4(12);
     const read = display.gray4(9);
 
     // LovyanGFX fillArc uses degrees with 0 at 3 o'clock (and increases clockwise on screen).
     // To avoid edge cases where a "full circle" angle span is treated as no-op, draw in two halves.
-    try display.fill_arc(cx, cy, r_out, r_in, 0.0, 180.0, unread);
-    try display.fill_arc(cx, cy, r_out, r_in, 180.0, 360.0, unread);
+    try display.fillArc(cx, cy, r_out, r_in, 0.0, 180.0, unread);
+    try display.fillArc(cx, cy, r_out, r_in, 180.0, 360.0, unread);
 
     if (progress == 0) return;
     if (progress >= 100) {
-        try display.fill_arc(cx, cy, r_out, r_in, 0.0, 180.0, read);
-        try display.fill_arc(cx, cy, r_out, r_in, 180.0, 360.0, read);
+        try display.fillArc(cx, cy, r_out, r_in, 0.0, 180.0, read);
+        try display.fillArc(cx, cy, r_out, r_in, 180.0, 360.0, read);
         return;
     }
 
@@ -91,32 +91,32 @@ fn draw_progress_donut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Er
     const end_deg: f32 = start_deg + sweep_deg;
 
     if (end_deg <= 360.0) {
-        try display.fill_arc(cx, cy, r_out, r_in, start_deg, end_deg, read);
+        try display.fillArc(cx, cy, r_out, r_in, start_deg, end_deg, read);
     } else {
-        try display.fill_arc(cx, cy, r_out, r_in, start_deg, 360.0, read);
-        try display.fill_arc(cx, cy, r_out, r_in, 0.0, end_deg - 360.0, read);
+        try display.fillArc(cx, cy, r_out, r_in, start_deg, 360.0, read);
+        try display.fillArc(cx, cy, r_out, r_in, 0.0, end_deg - 360.0, read);
     }
 }
 
 pub fn render(state: *State) Error!void {
-    try display.fill_screen(display.colors.WHITE);
-    try display.vlw.use_system(display.vlw.SystemFont.inter);
-    try display.text.set_size(1.0, 1.0);
-    try display.text.set_color(display.colors.BLACK, display.colors.WHITE);
+    try display.fillScreen(display.colors.WHITE);
+    try display.vlw.useSystem(display.vlw.SystemFont.inter);
+    try display.text.setSize(1.0, 1.0);
+    try display.text.setColor(display.colors.BLACK, display.colors.WHITE);
 
-    const layout = compute_layout();
+    const layout = computeLayout();
     state.entries_per_page = layout.rows;
     if (state.entries_per_page == 0) state.entries_per_page = 1;
     state.page_count = if (state.entry_count == 0) 1 else (state.entry_count + state.entries_per_page - 1) / state.entries_per_page;
     if (state.page_index >= state.page_count) state.page_index = state.page_count - 1;
 
-    try ui.draw_header(TITLE, layout.base);
+    try ui.drawHeader(TITLE, layout.base);
 
     // Pre-compute line heights for the two-line row format.
-    _ = try display.text.set_size(1.0, 1.0);
-    const title_h = display.text.font_height();
-    _ = try display.text.set_size(0.85, 0.85);
-    const author_h = display.text.font_height();
+    _ = try display.text.setSize(1.0, 1.0);
+    const title_h = display.text.fontHeight();
+    _ = try display.text.setSize(0.85, 0.85);
+    const author_h = display.text.fontHeight();
 
     const list_start = state.page_index * state.entries_per_page;
     var row: usize = 0;
@@ -132,18 +132,18 @@ pub fn render(state: *State) Error!void {
         const square_y = row_y + @divTrunc(layout.row_height - square, 2);
 
         if (square > 0) {
-            try display.fill_rect(square_x, square_y, square, square, display.colors.WHITE);
+            try display.fillRect(square_x, square_y, square, square, display.colors.WHITE);
 
             const cx = square_x + @divTrunc(square, 2);
             const cy = square_y + @divTrunc(square, 2);
             const r_out = @max(@as(i32, 1), @divTrunc(square, 2) - 2);
             const r_in = @max(@as(i32, 1), r_out - 7);
-            try draw_progress_donut(cx, cy, r_in, r_out, entry.progress);
+            try drawProgressDonut(cx, cy, r_in, r_out, entry.progress);
         }
 
         const text_x = square_x + square + 12;
         const text_w = (layout.base.content_left + layout.base.content_width) - text_x - 6;
-        const max_chars = ui.max_chars_for_width(text_w);
+        const max_chars = ui.maxCharsForWidth(text_w);
 
         const text_total_h: i32 = title_h + 2 + author_h;
         const text_y0 = row_y + @divTrunc(layout.row_height - text_total_h, 2);
@@ -152,36 +152,36 @@ pub fn render(state: *State) Error!void {
         var author_buf: [72]u8 = undefined;
 
         const title_slice = if (entry.title_len != 0) entry.title[0..@intCast(entry.title_len)] else entry.name[0..@intCast(entry.len)];
-        _ = try display.text.set_size(1.0, 1.0);
-        try display.text.set_color(display.colors.BLACK, display.colors.WHITE);
-        const title_c = ui.write_truncate_end(&title_buf, title_slice, max_chars);
-        try display.text.draw_cstr(title_c, text_x, text_y0);
+        _ = try display.text.setSize(1.0, 1.0);
+        try display.text.setColor(display.colors.BLACK, display.colors.WHITE);
+        const title_c = ui.writeTruncateEnd(&title_buf, title_slice, max_chars);
+        try display.text.drawCstr(title_c, text_x, text_y0);
 
-        _ = try display.text.set_size(0.85, 0.85);
-        try display.text.set_color(display.rgb888(120, 120, 120), display.colors.WHITE);
+        _ = try display.text.setSize(0.85, 0.85);
+        try display.text.setColor(display.rgb888(120, 120, 120), display.colors.WHITE);
         const unknown_author: []const u8 = "Unknown author";
         const author_slice = if (entry.author_len != 0) entry.author[0..@intCast(entry.author_len)] else unknown_author;
-        const author_c = ui.write_truncate_end(&author_buf, author_slice, max_chars);
-        try display.text.draw_cstr(author_c, text_x, text_y0 + title_h + 2);
+        const author_c = ui.writeTruncateEnd(&author_buf, author_slice, max_chars);
+        try display.text.drawCstr(author_c, text_x, text_y0 + title_h + 2);
 
         const sep_y = row_y + layout.row_height - 2;
         const sep = display.rgb888(140, 140, 140);
-        try display.draw_fast_hline(layout.base.content_left, sep_y, layout.base.content_width, sep);
-        try display.draw_fast_hline(layout.base.content_left, sep_y + 1, layout.base.content_width, sep);
+        try display.drawFastHline(layout.base.content_left, sep_y, layout.base.content_width, sep);
+        try display.drawFastHline(layout.base.content_left, sep_y + 1, layout.base.content_width, sep);
     }
 
     if (state.entry_count == 0) {
         try display.text.draw("(no books found)", layout.base.content_left + 6, layout.base.content_top + 8);
     }
 
-    _ = try display.text.set_size(1.0, 1.0);
-    try display.text.set_color(display.colors.BLACK, display.colors.WHITE);
+    _ = try display.text.setSize(1.0, 1.0);
+    try display.text.setColor(display.colors.BLACK, display.colors.WHITE);
 
     const can_prev = state.page_index > 0;
     const can_next = state.page_index + 1 < state.page_count;
-    try ui.draw_button(layout.prev_rect, ui.PREV_LABEL, can_prev);
-    try ui.draw_button(layout.next_rect, ui.NEXT_LABEL, can_next);
-    try ui.draw_button(layout.refresh_rect, REFRESH_LABEL, true);
+    try ui.drawButton(layout.prev_rect, ui.PREV_LABEL, can_prev);
+    try ui.drawButton(layout.next_rect, ui.NEXT_LABEL, can_next);
+    try ui.drawButton(layout.refresh_rect, REFRESH_LABEL, true);
 
     if (state.page_count > 1) {
         var page_buf: [32]u8 = undefined;
@@ -189,10 +189,10 @@ pub fn render(state: *State) Error!void {
         if (page_str.len > 0) {
             const n = @min(page_str.len, page_buf.len - 1);
             page_buf[n] = 0;
-            const page_w = ui.text_width_px(page_buf[0..n :0]);
+            const page_w = ui.textWidthPx(page_buf[0..n :0]);
             const page_x = @divTrunc(layout.base.width - page_w, 2);
             if (layout.page_pos.y >= layout.base.content_top) {
-                try display.text.draw_cstr(page_buf[0..n :0], page_x, layout.page_pos.y);
+                try display.text.drawCstr(page_buf[0..n :0], page_x, layout.page_pos.y);
             }
         }
     }
@@ -202,12 +202,12 @@ pub fn render(state: *State) Error!void {
     }
 
     try display.update();
-    display.wait_update();
+    display.waitUpdate();
 }
 
-pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
-    _ = display.text.set_size(1.0, 1.0) catch {};
-    const layout = compute_layout();
+pub fn handleTap(state: *State, point: touch.TouchPoint) void {
+    _ = display.text.setSize(1.0, 1.0) catch {};
+    const layout = computeLayout();
 
     if (layout.prev_rect.contains(point.x, point.y)) {
         if (state.page_index > 0) {
@@ -226,7 +226,7 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
     }
 
     if (layout.refresh_rect.contains(point.x, point.y)) {
-        books.refresh_books(state);
+        books.refreshBooks(state);
         state.needs_redraw = true;
         return;
     }
@@ -246,7 +246,7 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
     state.selected_name[n] = 0;
     state.selected_len = entry.len;
 
-    if (load_valid_saved_page_index(state)) |saved_page| {
+    if (loadValidSavedPageIndex(state)) |saved_page| {
         state.reading_page_index = saved_page;
         state.reading_restore_pending = false;
         state.screen = .reading;
@@ -256,17 +256,17 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
     state.needs_redraw = true;
 }
 
-fn load_valid_saved_page_index(state: *const State) ?u32 {
+fn loadValidSavedPageIndex(state: *const State) ?u32 {
     const name = state.selected_name[0..@intCast(state.selected_len)];
-    const saved = reading_position.load_page_index(name) orelse return null;
-    const page_count = load_book_page_count(state) orelse return null;
+    const saved = reading_position.loadPageIndex(name) orelse return null;
+    const page_count = loadBookPageCount(state) orelse return null;
     if (saved >= page_count) return null;
     return saved;
 }
 
-fn load_book_page_count(state: *const State) ?u32 {
+fn loadBookPageCount(state: *const State) ?u32 {
     var path_buf: [PATH_MAX]u8 = undefined;
-    const path = build_book_path(&path_buf, state) catch return null;
+    const path = buildBookPath(&path_buf, state) catch return null;
 
     var file = fs.File.open(path, fs.FS_READ) catch return null;
     defer file.close() catch {};
@@ -276,7 +276,7 @@ fn load_book_page_count(state: *const State) ?u32 {
     return reader.getPageCount();
 }
 
-fn build_book_path(out: []u8, state: *const State) ![:0]const u8 {
+fn buildBookPath(out: []u8, state: *const State) ![:0]const u8 {
     const name = state.selected_name[0..@intCast(state.selected_len)];
     if (name.len == 0) return error.PathTooLong;
 

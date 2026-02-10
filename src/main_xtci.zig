@@ -50,14 +50,14 @@ fn run(init: std.process.Init, stdout: *std.Io.Writer, stderr: *std.Io.Writer) !
 }
 
 const SeekReadStream = struct {
-    file_reader: *std.Io.File.Reader,
+    fileReader: *std.Io.File.Reader,
 
     pub fn seekTo(self: *SeekReadStream, pos: u64) !void {
-        try self.file_reader.seekTo(pos);
+        try self.fileReader.seekTo(pos);
     }
 
     pub fn read(self: *SeekReadStream, buf: []u8) !usize {
-        return self.file_reader.interface.readSliceShort(buf);
+        return self.fileReader.interface.readSliceShort(buf);
     }
 };
 
@@ -78,8 +78,8 @@ fn cmdInfo(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stderr: 
     defer file.close(init.io);
 
     var reader_buf: [8192]u8 = undefined;
-    var file_reader = file.reader(init.io, &reader_buf);
-    var stream = SeekReadStream{ .file_reader = &file_reader };
+    var fileReader = file.reader(init.io, &reader_buf);
+    var stream = SeekReadStream{ .fileReader = &fileReader };
 
     var reader = xtc_reader.XtcReader(SeekReadStream).init(&stream) catch |e| {
         try printCliError(stderr, e);
@@ -158,8 +158,8 @@ fn cmdToc(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stderr: *
     defer file.close(init.io);
 
     var reader_buf: [8192]u8 = undefined;
-    var file_reader = file.reader(init.io, &reader_buf);
-    var stream = SeekReadStream{ .file_reader = &file_reader };
+    var fileReader = file.reader(init.io, &reader_buf);
+    var stream = SeekReadStream{ .fileReader = &fileReader };
 
     var reader = xtc_reader.XtcReader(SeekReadStream).init(&stream) catch |e| {
         try printCliError(stderr, e);
@@ -215,8 +215,8 @@ fn cmdPages(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stderr:
     defer file.close(init.io);
 
     var reader_buf: [8192]u8 = undefined;
-    var file_reader = file.reader(init.io, &reader_buf);
-    var stream = SeekReadStream{ .file_reader = &file_reader };
+    var fileReader = file.reader(init.io, &reader_buf);
+    var stream = SeekReadStream{ .fileReader = &fileReader };
 
     var reader = xtc_reader.XtcReader(SeekReadStream).init(&stream) catch |e| {
         try printCliError(stderr, e);
@@ -270,8 +270,8 @@ fn cmdPage(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stderr: 
     defer file.close(init.io);
 
     var reader_buf: [8192]u8 = undefined;
-    var file_reader = file.reader(init.io, &reader_buf);
-    var stream = SeekReadStream{ .file_reader = &file_reader };
+    var fileReader = file.reader(init.io, &reader_buf);
+    var stream = SeekReadStream{ .fileReader = &fileReader };
 
     var reader = xtc_reader.XtcReader(SeekReadStream).init(&stream) catch |e| {
         try printCliError(stderr, e);
@@ -366,8 +366,8 @@ fn cmdRawPage(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stder
     defer file.close(init.io);
 
     var reader_buf: [8192]u8 = undefined;
-    var file_reader = file.reader(init.io, &reader_buf);
-    var stream = SeekReadStream{ .file_reader = &file_reader };
+    var fileReader = file.reader(init.io, &reader_buf);
+    var stream = SeekReadStream{ .fileReader = &fileReader };
 
     var reader = xtc_reader.XtcReader(SeekReadStream).init(&stream) catch |e| {
         try printCliError(stderr, e);
@@ -406,7 +406,7 @@ fn cmdRawPage(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stder
     var out_writer = out_file.writer(init.io, &out_buf);
     const out = &out_writer.interface;
 
-    file_reader.seekTo(entry.data_offset) catch |e| {
+    fileReader.seekTo(entry.data_offset) catch |e| {
         try stderr.print("xtci: failed to read input: {s}\n", .{@errorName(e)});
         return 2;
     };
@@ -415,7 +415,7 @@ fn cmdRawPage(it: anytype, init: std.process.Init, stdout: *std.Io.Writer, stder
     var remaining: usize = raw_size;
     while (remaining > 0) {
         const to_read: usize = @min(remaining, scratch.len);
-        const got = file_reader.interface.readSliceShort(scratch[0..to_read]) catch |e| {
+        const got = fileReader.interface.readSliceShort(scratch[0..to_read]) catch |e| {
             try stderr.print("xtci: failed to read input: {s}\n", .{@errorName(e)});
             return 2;
         };

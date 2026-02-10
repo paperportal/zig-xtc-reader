@@ -24,7 +24,8 @@
 
 - Format before pushing: `zig fmt build.zig src`
 - Follow Zig naming conventions:
-  - `snake_case` for files, functions, and variables
+  - `snake_case` for files and variables
+  - `lowerCamelCase` for functions, except functions that return a type (Zig) which use `PascalCase`
   - `PascalCase` for types
   - `SCREAMING_SNAKE_CASE` for constants
 - Keep parsing paths conservative with memory; prefer explicit buffers/allocators (not hidden global state).

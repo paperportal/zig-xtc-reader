@@ -20,10 +20,10 @@ var g_state: State = .{};
 
 pub fn init() Error!void {
     try core.begin();
-    _ = display.text.set_encoding_utf8() catch {};
-    try display.text.set_wrap(false, false);
-    try display.vlw.use_system(display.vlw.SystemFont.inter);
-    books.load_books(&g_state);
+    _ = display.text.setEncodingUtf8() catch {};
+    try display.text.setWrap(false, false);
+    try display.vlw.useSystem(display.vlw.SystemFont.inter);
+    books.loadBooks(&g_state);
     g_state.needs_redraw = true;
 }
 
@@ -33,16 +33,16 @@ pub fn tick(now_ms: i32) void {
     if (g_pending_tap) |tap| {
         g_pending_tap = null;
         switch (g_state.screen) {
-            .book_list => book_list_view.handle_tap(&g_state, tap),
+            .book_list => book_list_view.handleTap(&g_state, tap),
             .toc => {
-                if (toc_view.handle_tap(&g_state, tap)) {
-                    books.load_books(&g_state);
+                if (toc_view.handleTap(&g_state, tap)) {
+                    books.loadBooks(&g_state);
                 }
             },
-            .reading => reading_view.handle_tap(&g_state, tap),
+            .reading => reading_view.handleTap(&g_state, tap),
             .error_screen => {
-                if (error_view.handle_tap(&g_state, tap)) {
-                    books.load_books(&g_state);
+                if (error_view.handleTap(&g_state, tap)) {
+                    books.loadBooks(&g_state);
                 }
             },
         }
@@ -53,17 +53,17 @@ pub fn tick(now_ms: i32) void {
         switch (g_state.screen) {
             .book_list => book_list_view.render(&g_state) catch |err| {
                 g_state.screen = .error_screen;
-                state_mod.set_error_message(&g_state, "Render", err);
+                state_mod.setErrorMessage(&g_state, "Render", err);
                 g_state.needs_redraw = true;
             },
             .toc => toc_view.render(&g_state) catch |err| {
                 g_state.screen = .error_screen;
-                state_mod.set_error_message(&g_state, "Render", err);
+                state_mod.setErrorMessage(&g_state, "Render", err);
                 g_state.needs_redraw = true;
             },
             .reading => reading_view.render(&g_state) catch |err| {
                 g_state.screen = .error_screen;
-                state_mod.set_error_message(&g_state, "Render", err);
+                state_mod.setErrorMessage(&g_state, "Render", err);
                 g_state.needs_redraw = true;
             },
             .error_screen => error_view.render(&g_state) catch {},
@@ -71,7 +71,7 @@ pub fn tick(now_ms: i32) void {
     }
 }
 
-pub fn on_gesture(kind: i32, x: i32, y: i32, dx: i32, dy: i32, duration_ms: i32, now_ms: i32, flags: i32) void {
+pub fn onGesture(kind: i32, x: i32, y: i32, dx: i32, dy: i32, duration_ms: i32, now_ms: i32, flags: i32) void {
     _ = dx;
     _ = dy;
     _ = duration_ms;

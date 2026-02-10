@@ -31,7 +31,7 @@ pub fn render(state: *State) !void {
     tl.info("start page_index={d}", .{state.reading_page_index});
 
     var path_buf: [PATH_MAX]u8 = undefined;
-    const path = try build_book_path(&path_buf, state);
+    const path = try buildBookPath(&path_buf, state);
     tl.info("built path", .{});
 
     var file = try fs.File.open(path, fs.FS_READ);
@@ -47,7 +47,7 @@ pub fn render(state: *State) !void {
     if (state.reading_restore_pending) {
         state.reading_restore_pending = false;
         const name = state.selected_name[0..@intCast(state.selected_len)];
-        if (reading_position.load_page_index(name)) |saved| {
+        if (reading_position.loadPageIndex(name)) |saved| {
             state.reading_page_index = saved;
             tl.info("restored saved page_index={d}", .{saved});
         } else {
@@ -67,17 +67,17 @@ pub fn render(state: *State) !void {
     const bit_depth = reader.getBitDepth();
     if (bit_depth == 2) {
         tl.info("bit_depth=2 (XTH) clear screen", .{});
-        try display.fill_screen(display.colors.WHITE);
+        try display.fillScreen(display.colors.WHITE);
         tl.info("cleared screen", .{});
-        try render_xth(&file, entry.data_offset, page_w, page_h);
+        try renderXth(&file, entry.data_offset, page_w, page_h);
         tl.info("render_xth done", .{});
     } else if (bit_depth == 1) {
         tl.info("bit_depth=1 (XTG) set text mode", .{});
-        const prev_mode = display.epd.get_mode();
-        defer _ = display.epd.set_mode(prev_mode) catch {};
-        _ = display.epd.set_mode(display.epd.TEXT) catch {};
+        const prev_mode = display.epd.getMode();
+        defer _ = display.epd.setMode(prev_mode) catch {};
+        _ = display.epd.setMode(display.epd.TEXT) catch {};
         tl.info("text mode set", .{});
-        try render_xtg(&file, entry.data_offset, page_w, page_h);
+        try renderXtg(&file, entry.data_offset, page_w, page_h);
         tl.info("render_xtg done", .{});
     } else {
         return LocalError.UnsupportedFormat;
@@ -88,7 +88,7 @@ pub fn render(state: *State) !void {
     tl.info("done", .{});
 }
 
-pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
+pub fn handleTap(state: *State, point: touch.TouchPoint) void {
     const w = display.width();
     if (w <= 0) return;
 
@@ -97,13 +97,13 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
 
     if (point.x < left_third_max) {
         if (state.reading_page_index == 0) {
-            store_current_page(state);
+            storeCurrentPage(state);
             state.screen = .toc;
             state.needs_redraw = true;
             return;
         }
         state.reading_page_index -= 1;
-        store_current_page(state);
+        storeCurrentPage(state);
         state.needs_redraw = true;
         return;
     }
@@ -111,27 +111,27 @@ pub fn handle_tap(state: *State, point: touch.TouchPoint) void {
     if (point.x >= right_third_min) {
         if (state.reading_page_index + 1 < state.reading_page_count) {
             state.reading_page_index += 1;
-            store_current_page(state);
+            storeCurrentPage(state);
             state.needs_redraw = true;
         }
         return;
     }
 
     // Center tap returns to the in-book index (TOC) without losing position.
-    store_current_page(state);
+    storeCurrentPage(state);
     state.screen = .toc;
     state.needs_redraw = true;
 }
 
-fn store_current_page(state: *const State) void {
+fn storeCurrentPage(state: *const State) void {
     if (state.selected_len == 0) return;
     if (state.reading_page_count == 0) return;
 
     const name = state.selected_name[0..@intCast(state.selected_len)];
-    reading_position.store_page_index(name, state.reading_page_index);
+    reading_position.storePageIndex(name, state.reading_page_index);
 }
 
-fn build_book_path(out: []u8, state: *const State) ![:0]const u8 {
+fn buildBookPath(out: []u8, state: *const State) ![:0]const u8 {
     const name = state.selected_name[0..@intCast(state.selected_len)];
     if (name.len == 0) return LocalError.PathTooLong;
 
@@ -165,11 +165,11 @@ const FileStream = struct {
     }
 };
 
-fn render_xtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !void {
+fn renderXtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !void {
     var tl = TimeLogger.init("reading_view.render_xtg");
     tl.info("start off=0x{X} expected={d}x{d}", .{ page_blob_offset, page_w, page_h });
 
-    const hdr = try read_page_header(file, page_blob_offset);
+    const hdr = try readPageHeader(file, page_blob_offset);
     tl.info("read header magic=0x{X} size={d}x{d} data_size={d}", .{ hdr.magic, hdr.width, hdr.height, hdr.data_size });
     if (hdr.magic != xtc_reader.XTG_MAGIC) return LocalError.InvalidPageHeader;
     if (hdr.color_mode != 0 or hdr.compression != 0) return LocalError.InvalidPageHeader;
@@ -190,7 +190,7 @@ fn render_xtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !
     // Most book pages are full-screen; skip clearing in that case to avoid redundant writes.
     if (draw_w != disp_w or draw_h != disp_h) {
         tl.info("clear screen (letterboxed)", .{});
-        try display.fill_screen(display.colors.WHITE);
+        try display.fillScreen(display.colors.WHITE);
         tl.info("cleared screen", .{});
     }
 
@@ -212,9 +212,9 @@ fn render_xtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !
         if (g_page_blob_scratch.len < data_size) {
             tl.info("grow scratch {d} -> {d}", .{ g_page_blob_scratch.len, data_size });
         }
-        var image_buf = try ensure_scratch_buffer(data_size);
+        var image_buf = try ensureScratchBuffer(data_size);
         tl.info("read image bytes={d}", .{data_size});
-        try read_exact_at(file, image_offset, image_buf[0..data_size]);
+        try readExactAt(file, image_offset, image_buf[0..data_size]);
         tl.info("read image complete", .{});
 
         const palette = [_]u32{
@@ -222,7 +222,7 @@ fn render_xtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !
             @as(u32, @bitCast(display.colors.BLACK)),
         };
         tl.info("push_image", .{});
-        try display.image.push_image(
+        try display.image.pushImage(
             dst_x0,
             dst_y0,
             decoded_w,
@@ -242,12 +242,12 @@ fn render_xtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !
     if (g_page_blob_scratch.len < blob_size) {
         tl.info("grow scratch {d} -> {d}", .{ g_page_blob_scratch.len, blob_size });
     }
-    var xtg_buf = try ensure_scratch_buffer(blob_size);
+    var xtg_buf = try ensureScratchBuffer(blob_size);
     tl.info("read xtg blob", .{});
-    try read_exact_at(file, page_blob_offset, xtg_buf[0..blob_size]);
+    try readExactAt(file, page_blob_offset, xtg_buf[0..blob_size]);
     tl.info("read xtg blob complete", .{});
     tl.info("draw_xtg_centered", .{});
-    try display.image.draw_xtg_centered(xtg_buf[0..blob_size]);
+    try display.image.drawXtgCentered(xtg_buf[0..blob_size]);
     tl.info("draw_xtg_centered done", .{});
 }
 
@@ -261,11 +261,11 @@ const PageHeader = struct {
     md5_8: u64,
 };
 
-fn render_xth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !void {
+fn renderXth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !void {
     var tl = TimeLogger.init("reading_view.render_xth");
     tl.info("start off=0x{X} expected={d}x{d}", .{ page_blob_offset, page_w, page_h });
 
-    const hdr = try read_page_header(file, page_blob_offset);
+    const hdr = try readPageHeader(file, page_blob_offset);
     tl.info("read header magic=0x{X} size={d}x{d} data_size={d}", .{ hdr.magic, hdr.width, hdr.height, hdr.data_size });
     if (hdr.magic != xtc_reader.XTH_MAGIC) return LocalError.InvalidPageHeader;
     if (hdr.color_mode != 0 or hdr.compression != 0) return LocalError.InvalidPageHeader;
@@ -282,16 +282,16 @@ fn render_xth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !
     if (g_page_blob_scratch.len < blob_size) {
         tl.info("grow scratch {d} -> {d}", .{ g_page_blob_scratch.len, blob_size });
     }
-    var xth_buf = try ensure_scratch_buffer(blob_size);
+    var xth_buf = try ensureScratchBuffer(blob_size);
     tl.info("read xth blob", .{});
-    try read_exact_at(file, page_blob_offset, xth_buf[0..blob_size]);
+    try readExactAt(file, page_blob_offset, xth_buf[0..blob_size]);
     tl.info("read xth blob complete", .{});
     tl.info("draw_xth_centered", .{});
-    try display.image.draw_xth_centered(xth_buf[0..blob_size]);
+    try display.image.drawXthCentered(xth_buf[0..blob_size]);
     tl.info("draw_xth_centered done", .{});
 }
 
-fn ensure_scratch_buffer(size: usize) ![]u8 {
+fn ensureScratchBuffer(size: usize) ![]u8 {
     if (g_page_blob_scratch.len < size) {
         const allocator = std.heap.wasm_allocator;
         if (g_page_blob_scratch.len == 0) {
@@ -303,18 +303,18 @@ fn ensure_scratch_buffer(size: usize) ![]u8 {
     return g_page_blob_scratch[0..size];
 }
 
-fn read_page_header(file: *fs.File, offset: u64) !PageHeader {
+fn readPageHeader(file: *fs.File, offset: u64) !PageHeader {
     var buf: [PAGE_HEADER_LEN]u8 = undefined;
-    try read_exact_at(file, offset, buf[0..]);
+    try readExactAt(file, offset, buf[0..]);
 
     var idx: usize = 0;
-    const magic = read_u32_le(buf[0..], &idx);
-    const width = read_u16_le(buf[0..], &idx);
-    const height = read_u16_le(buf[0..], &idx);
-    const color_mode = read_u8(buf[0..], &idx);
-    const compression = read_u8(buf[0..], &idx);
-    const data_size = read_u32_le(buf[0..], &idx);
-    const md5_8 = read_u64_le(buf[0..], &idx);
+    const magic = readU32Le(buf[0..], &idx);
+    const width = readU16Le(buf[0..], &idx);
+    const height = readU16Le(buf[0..], &idx);
+    const color_mode = readU8(buf[0..], &idx);
+    const compression = readU8(buf[0..], &idx);
+    const data_size = readU32Le(buf[0..], &idx);
+    const md5_8 = readU64Le(buf[0..], &idx);
 
     return PageHeader{
         .magic = magic,
@@ -327,7 +327,7 @@ fn read_page_header(file: *fs.File, offset: u64) !PageHeader {
     };
 }
 
-fn read_exact_at(file: *fs.File, offset: u64, out: []u8) !void {
+fn readExactAt(file: *fs.File, offset: u64, out: []u8) !void {
     if (offset > @as(u64, std.math.maxInt(i32))) return LocalError.SeekTooLarge;
     _ = try file.seek(.{ .Start = @intCast(offset) });
 
@@ -339,27 +339,27 @@ fn read_exact_at(file: *fs.File, offset: u64, out: []u8) !void {
     }
 }
 
-fn read_u8(bytes: []const u8, idx: *usize) u8 {
+fn readU8(bytes: []const u8, idx: *usize) u8 {
     const v = bytes[idx.*];
     idx.* += 1;
     return v;
 }
 
-fn read_u16_le(bytes: []const u8, idx: *usize) u16 {
+fn readU16Le(bytes: []const u8, idx: *usize) u16 {
     const start = idx.*;
     idx.* = start + 2;
     const ptr: *const [2]u8 = @ptrCast(bytes[start .. start + 2].ptr);
     return std.mem.readInt(u16, ptr, .little);
 }
 
-fn read_u32_le(bytes: []const u8, idx: *usize) u32 {
+fn readU32Le(bytes: []const u8, idx: *usize) u32 {
     const start = idx.*;
     idx.* = start + 4;
     const ptr: *const [4]u8 = @ptrCast(bytes[start .. start + 4].ptr);
     return std.mem.readInt(u32, ptr, .little);
 }
 
-fn read_u64_le(bytes: []const u8, idx: *usize) u64 {
+fn readU64Le(bytes: []const u8, idx: *usize) u64 {
     const start = idx.*;
     idx.* = start + 8;
     const ptr: *const [8]u8 = @ptrCast(bytes[start .. start + 8].ptr);

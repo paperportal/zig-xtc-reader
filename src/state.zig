@@ -56,10 +56,10 @@ pub const State = struct {
     error_message: [120]u8 = .{0} ** 120,
 };
 
-pub fn set_error_message(state: *State, prefix: []const u8, err: anyerror) void {
+pub fn setErrorMessage(state: *State, prefix: []const u8, err: anyerror) void {
     var last_buf: [96]u8 = undefined;
     var last: []const u8 = "";
-    if (core.last_error_message(last_buf[0..])) |msg| {
+    if (core.lastErrorMessage(last_buf[0..])) |msg| {
         last = msg;
     } else |_| {
         last = "";
