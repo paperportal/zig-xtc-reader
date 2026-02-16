@@ -4,11 +4,10 @@ var g_initialized: bool = false;
 
 pub fn main() !void {}
 
-pub export fn ppInit(api_version: i32, api_features: i64, screen_w: i32, screen_h: i32) i32 {
+pub export fn ppInit(api_version: i32, args_ptr: i32, args_len: i32) i32 {
     _ = api_version;
-    _ = api_features;
-    _ = screen_w;
-    _ = screen_h;
+    _ = args_ptr;
+    _ = args_len;
 
     if (g_initialized) return 0;
     app.init() catch {
