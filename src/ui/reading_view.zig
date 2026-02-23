@@ -82,9 +82,6 @@ pub fn render(state: *State) !void {
     } else {
         return LocalError.UnsupportedFormat;
     }
-
-    //    try display.update();
-    //    display.wait_update();
     tl.info("done", .{});
 }
 

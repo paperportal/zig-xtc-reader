@@ -6,8 +6,8 @@ pub fn build(b: *std.Build) void {
         .local_sdk_path = "../zig-sdk",
         .export_symbol_names = &.{
             "ppInit",
-            "ppTick",
             "ppOnGesture",
+            "ppShutdown",
         },
     });
 
@@ -55,9 +55,4 @@ pub fn build(b: *std.Build) void {
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
-}
-
-fn dirExists(b: *std.Build, rel: []const u8) bool {
-    std.Io.Dir.cwd().access(b.graph.io, rel, .{}) catch return false;
-    return true;
 }

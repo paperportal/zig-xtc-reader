@@ -141,4 +141,3 @@ pub fn drawButton(rect: Rect, label: [:0]const u8, enabled: bool) Error!void {
     const label_y = rect.y + @divTrunc(rect.h - label_h, 2);
     try display.text.drawCstr(label, label_x, label_y);
 }
-

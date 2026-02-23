@@ -100,7 +100,7 @@ fn drawProgressDonut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Erro
 
 pub fn render(state: *State) Error!void {
     try display.fillScreen(display.colors.WHITE);
-    try display.vlw.useSystem(display.vlw.SystemFont.inter);
+    try display.vlw.useSystem(display.vlw.SystemFont.inter, 12);
     try display.text.setSize(1.0, 1.0);
     try display.text.setColor(display.colors.BLACK, display.colors.WHITE);
 
