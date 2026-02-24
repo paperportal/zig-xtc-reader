@@ -1,24 +1,33 @@
 const app = @import("app.zig");
+const sdk = @import("paper_portal_sdk");
+const ui = sdk.ui;
 
-pub fn main() !void {}
+const RootScene = struct {
+    pub fn draw(self: *RootScene, ctx: *ui.Context) anyerror!void {
+        _ = self;
+        _ = ctx;
+    }
 
-pub export fn ppInit(api_version: i32, args_ptr: i32, args_len: i32) i32 {
-    _ = api_version;
-    _ = args_ptr;
-    _ = args_len;
+    pub fn onGesture(self: *RootScene, ctx: *ui.Context, nav: *ui.Navigator, ev: ui.GestureEvent) anyerror!void {
+        _ = self;
+        _ = ctx;
+        _ = nav;
+        app.onGesture(@intFromEnum(ev.kind), ev.x, ev.y, ev.dx, ev.dy, ev.duration_ms, ev.now_ms, ev.flags);
+    }
+};
 
+var g_root: RootScene = .{};
+
+pub fn main() !void {
     app.init() catch {
-        return -1;
+        return;
     };
-    return 0;
-}
 
-pub export fn ppOnGesture(kind: i32, x: i32, y: i32, dx: i32, dy: i32, duration_ms: i32, now_ms: i32, flags: i32) i32 {
-    app.onGesture(kind, x, y, dx, dy, duration_ms, now_ms, flags);
-    return 0;
+    ui.scene.set(ui.Scene.from(RootScene, &g_root)) catch {};
 }
 
 pub export fn ppShutdown() i32 {
+    ui.scene.deinitStack();
     app.shutdown();
     return 0;
 }
