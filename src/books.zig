@@ -218,8 +218,6 @@ fn loadCatalogIntoState(state: *State) bool {
         const author_src: *const [catalog.AUTHOR_FS]u8 = @ptrCast(record_buf[rec_idx .. rec_idx + catalog.AUTHOR_FS].ptr);
         rec_idx += catalog.AUTHOR_FS;
         const page_count = readU16Le(record_buf[0..], &rec_idx);
-        const progress_hint = record_buf[rec_idx];
-        rec_idx += 1;
         _ = record_buf[rec_idx]; // tag_count (ignored)
         rec_idx += 1;
         rec_idx += catalog.TAG_SLOTS * catalog.TAG_FS;
@@ -228,7 +226,6 @@ fn loadCatalogIntoState(state: *State) bool {
         var e = &state.entries[state.entry_count];
         clearEntry(e);
         e.page_count = page_count;
-        e.progress = if (progress_hint <= 100) progress_hint else 100;
 
         const title_len = catalog.decodeFixedString(catalog.TITLE_FS, title_src, e.title[0..]) orelse 0;
         e.title_len = @min(title_len, @as(u8, state_mod.TITLE_MAX_BYTES));
@@ -299,8 +296,6 @@ fn writeCatalogFromState(state: *State) void {
         r += catalog.AUTHOR_FS;
 
         writeU16Le(record[0..], &r, state.entries[i].page_count);
-        record[r] = if (state.entries[i].progress <= 100) state.entries[i].progress else 100;
-        r += 1;
         record[r] = 0; // tag_count
         r += 1;
         r += catalog.TAG_SLOTS * catalog.TAG_FS;

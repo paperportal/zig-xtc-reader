@@ -244,7 +244,7 @@ fn renderXtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !v
     try readExactAt(file, page_blob_offset, xtg_buf[0..blob_size]);
     tl.info("read xtg blob complete", .{});
     tl.info("draw_xtg_centered", .{});
-    try display.image.drawXtgCentered(xtg_buf[0..blob_size]);
+    try display.image.drawXtg(xtg_buf[0..blob_size]);
     tl.info("draw_xtg_centered done", .{});
 }
 
@@ -284,7 +284,7 @@ fn renderXth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !v
     try readExactAt(file, page_blob_offset, xth_buf[0..blob_size]);
     tl.info("read xth blob complete", .{});
     tl.info("draw_xth_centered", .{});
-    try display.image.drawXthCentered(xth_buf[0..blob_size]);
+    try display.image.drawXth(xth_buf[0..blob_size]);
     tl.info("draw_xth_centered done", .{});
 }
 
