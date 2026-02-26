@@ -14,6 +14,7 @@ const TimeLogger = sdk.misc.TimeLogger;
 
 const PATH_MAX: usize = 256;
 const PAGE_HEADER_LEN: usize = 22;
+const SLOW_UPDATE_INTERVAL: i8 = 6;
 
 var g_page_blob_scratch: []u8 = &[_]u8{};
 
@@ -59,6 +60,9 @@ pub fn render(state: *State) !void {
         tl.warn("clamped page_index={d}", .{state.reading_page_index});
     }
 
+    const use_fast_update = (state.reading_page_update_counter % SLOW_UPDATE_INTERVAL) != 0;
+    state.reading_page_update_counter += 1;
+
     const entry = try reader.readPageTableEntry(state.reading_page_index);
     const page_w: i32 = @intCast(entry.width);
     const page_h: i32 = @intCast(entry.height);
@@ -66,18 +70,15 @@ pub fn render(state: *State) !void {
 
     const bit_depth = reader.getBitDepth();
     if (bit_depth == 2) {
-        tl.info("bit_depth=2 (XTH) clear screen", .{});
-        try display.fillScreen(display.colors.WHITE);
-        tl.info("cleared screen", .{});
-        try renderXth(&file, entry.data_offset, page_w, page_h);
+        try display.setDisplayMode(display.DisplayMode.gray4);
+        try renderXth(&file, entry.data_offset, page_w, page_h, use_fast_update);
         tl.info("render_xth done", .{});
     } else if (bit_depth == 1) {
-        tl.info("bit_depth=1 (XTG) set text mode", .{});
         const prev_mode = display.epd.getMode();
         defer _ = display.epd.setMode(prev_mode) catch {};
-        _ = display.epd.setMode(display.epd.TEXT) catch {};
-        tl.info("text mode set", .{});
-        try renderXtg(&file, entry.data_offset, page_w, page_h);
+        //        _ = display.epd.setMode(display.epd.TEXT) catch {};
+        try display.setDisplayMode(display.DisplayMode.bw);
+        try renderXtg(&file, entry.data_offset, page_w, page_h, use_fast_update);
         tl.info("render_xtg done", .{});
     } else {
         return LocalError.UnsupportedFormat;
@@ -162,7 +163,7 @@ const FileStream = struct {
     }
 };
 
-fn renderXtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !void {
+fn renderXtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32, use_fast_update: bool) !void {
     var tl = TimeLogger.init("reading_view.render_xtg");
     tl.info("start off=0x{X} expected={d}x{d}", .{ page_blob_offset, page_w, page_h });
 
@@ -185,11 +186,11 @@ fn renderXtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !v
     tl.info("layout draw={d}x{d} dst=({d},{d}) disp={d}x{d}", .{ draw_w, draw_h, dst_x0, dst_y0, disp_w, disp_h });
 
     // Most book pages are full-screen; skip clearing in that case to avoid redundant writes.
-    if (draw_w != disp_w or draw_h != disp_h) {
-        tl.info("clear screen (letterboxed)", .{});
-        try display.fillScreen(display.colors.WHITE);
-        tl.info("cleared screen", .{});
-    }
+    //    if (draw_w != disp_w or draw_h != disp_h) {
+    //        tl.info("clear screen (letterboxed)", .{});
+    //        try display.fillScreen(display.colors.WHITE);
+    //        tl.info("cleared screen", .{});
+    //    }
 
     const w_u64: u64 = hdr.width;
     const h_u64: u64 = hdr.height;
@@ -243,9 +244,9 @@ fn renderXtg(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !v
     tl.info("read xtg blob", .{});
     try readExactAt(file, page_blob_offset, xtg_buf[0..blob_size]);
     tl.info("read xtg blob complete", .{});
-    tl.info("draw_xtg_centered", .{});
-    try display.image.drawXtg(xtg_buf[0..blob_size]);
-    tl.info("draw_xtg_centered done", .{});
+    tl.info("draw_xtg", .{});
+    try display.image.drawXtg(xtg_buf[0..blob_size], use_fast_update);
+    tl.info("draw_xtg done", .{});
 }
 
 const PageHeader = struct {
@@ -258,7 +259,7 @@ const PageHeader = struct {
     md5_8: u64,
 };
 
-fn renderXth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !void {
+fn renderXth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32, use_fast_update: bool) !void {
     var tl = TimeLogger.init("reading_view.render_xth");
     tl.info("start off=0x{X} expected={d}x{d}", .{ page_blob_offset, page_w, page_h });
 
@@ -283,9 +284,9 @@ fn renderXth(file: *fs.File, page_blob_offset: u64, page_w: i32, page_h: i32) !v
     tl.info("read xth blob", .{});
     try readExactAt(file, page_blob_offset, xth_buf[0..blob_size]);
     tl.info("read xth blob complete", .{});
-    tl.info("draw_xth_centered", .{});
-    try display.image.drawXth(xth_buf[0..blob_size]);
-    tl.info("draw_xth_centered done", .{});
+    tl.info("draw_xth", .{});
+    try display.image.drawXth(xth_buf[0..blob_size], use_fast_update);
+    tl.info("draw_xth done", .{});
 }
 
 fn ensureScratchBuffer(size: usize) ![]u8 {

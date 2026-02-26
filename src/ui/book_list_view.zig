@@ -99,6 +99,7 @@ fn drawProgressDonut(cx: i32, cy: i32, r_in: i32, r_out: i32, progress: u8) Erro
 }
 
 pub fn render(state: *State) Error!void {
+    try display.setDisplayMode(display.DisplayMode.gray16);
     try display.fillScreen(display.colors.WHITE);
     try display.vlw.useSystem(display.vlw.SystemFont.inter, 12);
     try display.text.setSize(1.0, 1.0);
@@ -249,6 +250,7 @@ pub fn handleTap(state: *State, point: touch.TouchPoint) void {
     if (loadValidSavedPageIndex(state)) |saved_page| {
         state.reading_page_index = saved_page;
         state.reading_restore_pending = false;
+        state.reading_page_update_counter = 0;
         state.screen = .reading;
     } else {
         state.screen = .toc;
